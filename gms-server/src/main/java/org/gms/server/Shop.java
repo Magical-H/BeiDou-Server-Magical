@@ -57,7 +57,7 @@ public class Shop {
     private final int tokenvalue = 1000000000;
     private final int token = ItemId.GOLDEN_MAPLE_LEAF;
 
-    static {
+    /*static {
         for (int throwingStarId : ItemId.allThrowingStarIds()) {
             rechargeableItems.add(throwingStarId);
         }
@@ -68,7 +68,7 @@ public class Shop {
         for (int bulletId : ItemId.allBulletIds()) {
             rechargeableItems.add(bulletId);
         }
-    }
+    }*/ //加新飞镖、子弹类道具可以直接解析所有带unitPrice的道具。去掉这段硬编码，加载解析后的数据。可以不动源码光加xml就能行
 
     private Shop(int id, int npcId) {
         this.id = id;

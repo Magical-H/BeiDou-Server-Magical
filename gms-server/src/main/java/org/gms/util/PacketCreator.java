@@ -2409,9 +2409,7 @@ public class PacketCreator {
                 p.writeShort(1); // stacksize o.o
                 p.writeShort(item.getBuyable());
             } else {
-                p.writeShort(0);
-                p.writeInt(0);
-                p.writeShort(doubleToShortBits(ii.getUnitPrice(item.getItemId())));
+                p.writeLong(Double.doubleToLongBits(ii.getUnitPrice(item.getItemId())));//修复飞镖、子弹类道具储值，不需要瞎改xml中的unitPrice字段value为1，还导致所有飞镖类储值价格变成了一样的
                 p.writeShort(ii.getSlotMax(c, item.getItemId()));
             }
         }

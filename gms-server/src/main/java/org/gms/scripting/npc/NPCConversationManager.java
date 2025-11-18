@@ -1446,4 +1446,9 @@ public class NPCConversationManager extends AbstractPlayerInteraction {
         nextLevelContext.setLastLevel(noLevel);
         nextLevelContext.setNextLevel(yesLevel);
     }
+
+    // 获取当前世界在线人数
+    public int getOnlineCount() {
+        return Server.getInstance().getWorld(c.getWorld()).getPlayerStorage().getSize();
+    }
 }

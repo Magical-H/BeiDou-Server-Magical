@@ -104,6 +104,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
         short position = p.readShort(); //使用的道具位置
         int itemId = p.readInt();
         int itemType = itemId / 10000;  //装备类型
+        String ItemName = ii.getName(itemId);   //物品名称
 
         Inventory cashInv = player.getInventory(InventoryType.CASH);
         Item toUse = cashInv.getItem(position);
@@ -130,6 +131,11 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
         }
 
         if (itemType == 504) { // vip teleport rock//缩地石
+            if (!GameConfig.getBoolean("usb_cash_item_teleportrock")) {//缩地石控制开关
+                player.dropMessage(1, ItemName + " 目前已被禁用。");
+                c.enableActions();
+                return;
+            }
             String error1 = I18nUtil.getMessage("UseCashItemHandler.handlePacket.error1");
             boolean vip = p.readByte() == 1 && itemId / 1000 >= 5041;
             remove(c, position, itemId);
@@ -154,7 +160,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 if (victim != null) {
                     MapleMap targetMap = victim.getMap();
                     if (!FieldLimit.CANNOTVIPROCK.check(targetMap.getFieldLimit()) && (targetMap.getForcedReturnId() == MapId.NONE || MapId.isMapleIsland(targetMap.getId()))) {
-                        if (!victim.isGM() || victim.gmLevel() <= player.gmLevel()) {   // thanks Yoboes for noticing non-GM's being unreachable through rocks
+                        if (!victim.isGM() || victim.gmLevel() <= player.gmLevel()) {   // 感谢Yoboes提醒非GM玩家无法通过传送石到达的问题
                             player.forceChangeMap(targetMap, targetMap.findClosestPlayerSpawnpoint(victim.getPosition()));
                             success = true;
                         } else {
@@ -294,18 +300,17 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
         } else if (itemType == 507) {   //喇叭
             boolean whisper;
             switch ((itemId / 1000) % 10) {
-                case 1: // Megaphone
+                case 1 -> { // Megaphone
                     if (player.getLevel() > 9) {
                         player.getClient().getChannelServer().broadcastPacket(PacketCreator.serverNotice(2, medal + player.getName() + " : " + p.readString()));
                     } else {
                         player.dropMessage(1, I18nUtil.getMessage("UseCashItemHandler.handlePacket.message4"));
                         return;
                     }
-                    break;
-                case 2: // Super megaphone
-                    Server.getInstance().broadcastMessage(c.getWorld(), PacketCreator.serverNotice(3, c.getChannel(), medal + player.getName() + " : " + p.readString(), (p.readByte() != 0)));
-                    break;
-                case 5: // Maple TV
+                }
+                case 2 -> // Super megaphone
+                        Server.getInstance().broadcastMessage(c.getWorld(), PacketCreator.serverNotice(3, c.getChannel(), medal + player.getName() + " : " + p.readString(), (p.readByte() != 0)));
+                case 5 -> { // Maple TV
                     int tvType = itemId % 10;
                     boolean megassenger = false;
                     boolean ear = false;
@@ -334,18 +339,15 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                         messages.add(message);
                     }
                     p.readInt();
-
                     if (!MapleTVEffect.broadcastMapleTVIfNotActive(player, victim, messages, tvType)) {
                         player.dropMessage(1, I18nUtil.getMessage("UseCashItemHandler.handlePacket.message5"));
                         return;
                     }
-
                     if (megassenger) {
                         Server.getInstance().broadcastMessage(c.getWorld(), PacketCreator.serverNotice(3, c.getChannel(), medal + player.getName() + " : " + builder, ear));
                     }
-
-                    break;
-                case 6: //item megaphone
+                }
+                case 6 -> { //item megaphone
                     String msg = medal + player.getName() + " : " + p.readString();
                     whisper = p.readByte() == 1;
                     Item item = null;
@@ -359,8 +361,8 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                         // thanks Conrad for noticing that untradeable items should be allowed in megas
                     }
                     Server.getInstance().broadcastMessage(c.getWorld(), PacketCreator.itemMegaphone(msg, whisper, c.getChannel(), item));
-                    break;
-                case 7: //triple megaphone
+                }
+                case 7 -> { //triple megaphone
                     int lines = p.readByte();
                     if (lines < 1 || lines > 3) //hack
                     {
@@ -372,7 +374,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                     }
                     whisper = p.readByte() == 1;
                     Server.getInstance().broadcastMessage(c.getWorld(), PacketCreator.getMultiMegaphone(msg2, c.getChannel(), whisper));
-                    break;
+                }
             }
             remove(c, position, itemId);
         } else if (itemType == 508) {   //风筝    // thanks tmskdl12 for graduation banner; thanks ratency for first pointing lack of Kite handling
@@ -536,7 +538,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             int jobid = p.readInt();
             int improveSp = p.readInt();
             if (ItemConstants.notValidHairColor(haircolor)) {
-                log.warn("{} want to create a character with a not valid hair color {}", player.getName(), haircolor);
+                log.warn("{} 想要创建一个拥有无效发色的角色：{}", player.getName(), haircolor);
                 c.enableActions();
                 return;
             }
@@ -647,7 +649,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
             c.enableActions(); // 发送启用操作的封包
             c.sendPacket(PacketCreator.sendHammerData(equip.getVicious())); // 发送锤子数据封包
             player.forceUpdateItem(equip); // 强制更新装备信息
-        } else if (itemType == 561) { //VEGA'S SPELL
+        } else if (itemType == 561) { //VEGA'S SPELL  //维嘉的咒语
             if (p.readInt() != 1) {
                 return;
             }
@@ -710,7 +712,7 @@ public final class UseCashItemHandler extends AbstractPacketHandler {
                 client.enableActions();
             }, SECONDS.toMillis(3));
         } else {
-            log.warn("NEW CASH ITEM TYPE: {}, packet: {}", itemType, p);
+            log.warn("新的现金道具类型: {}, 数据包: {}", itemType, p);
             c.enableActions();
         }
         c.enableActions();

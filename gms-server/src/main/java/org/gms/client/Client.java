@@ -532,7 +532,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     public boolean banIP() {
         String ip = getRemoteAddress();
         try (Connection con = DatabaseConnection.getConnection()) {
-            if (ip.matches("[0-9]{1,3}\\..*")) {
+            if (ip.matches("[0-9]{1,3}\\..*") && !ip.equals("127.0.0.1")) {
                 try (PreparedStatement ps = con.prepareStatement("INSERT INTO ipbans VALUES (DEFAULT, ?, ?)")) {
                     ps.setString(1, ip);
                     ps.setInt(2, getAccID());
@@ -1213,7 +1213,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public void timeoutDisconnect() {
-        disconnectInternal(true, false);
+        disconnectInternal(false, false);   //只有这样才能正确断开玩家角色，否则会导致自动断开检测一直重复断开同一个橘色
     }
 
     private synchronized boolean canDisconnect() {

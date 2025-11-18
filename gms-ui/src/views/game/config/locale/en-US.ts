@@ -18,6 +18,9 @@ export default {
   'config.subType.Net': 'Net',
   'config.subType.Debug': 'Debug',
   'config.subType.GM': 'GM',
+  'config.subType.CashShop': 'Cash Shop',
+  'config.subType.CheatSystem': 'Cheat System',
+  'config.subType.AntiCheat': 'Anti-Cheat',
 
   'config.clz.int': 'Integer',
   'config.clz.float': 'Decimal',

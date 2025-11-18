@@ -248,7 +248,7 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
                     }
 
                     if (attack.magic) {
-                        distanceToDetect += 200000;
+                        distanceToDetect += 250000;
                     }
 
                     if (player.getJob().isA(Job.ARAN1)) {
@@ -257,16 +257,20 @@ public abstract class AbstractDealDamageHandler extends AbstractPacketHandler {
 
                     if (attack.skill == Aran.COMBO_SMASH || attack.skill == Aran.BODY_PRESSURE) {
                         distanceToDetect += 40000;
-                    } else if (attack.skill == Bishop.GENESIS || attack.skill == ILArchMage.BLIZZARD || attack.skill == FPArchMage.METEOR_SHOWER) {
-                        distanceToDetect += 275000;
-                    } else if (attack.skill == Hero.BRANDISH || attack.skill == DragonKnight.SPEAR_CRUSHER || attack.skill == DragonKnight.POLE_ARM_CRUSHER) {
-                        distanceToDetect += 40000;
-                    } else if (attack.skill == DragonKnight.DRAGON_ROAR || attack.skill == SuperGM.SUPER_DRAGON_ROAR) {
-                        distanceToDetect += 250000;
-                    } else if (attack.skill == Shadower.BOOMERANG_STEP) {
-                        distanceToDetect += 60000;
+                    } else if (attack.skill == Bishop.GENESIS || attack.skill == ILArchMage.BLIZZARD || attack.skill == FPArchMage.METEOR_SHOWER) {//圣光普照、落霜冰破、天降落星
+                        distanceToDetect += 350000;
+                    } else if (attack.skill == Hero.BRANDISH || attack.skill == DragonKnight.SPEAR_CRUSHER || attack.skill == DragonKnight.POLE_ARM_CRUSHER || attack.skill == DawnWarrior.BRANDISH) {
+                        distanceToDetect += 100000;
+                    } else if (attack.skill == DragonKnight.DRAGON_ROAR || attack.skill == SuperGM.SUPER_DRAGON_ROAR || attack.skill == Crusader.SHOUT) { //龙咆哮 、 GM龙咆哮 、 虎咆哮
+                        distanceToDetect += 350000;
+                    } else if (attack.skill == Shadower.BOOMERANG_STEP) { //一出双击
+                        distanceToDetect += 200000;
                     } else if (attack.skill == ILArchMage.CHAIN_LIGHTNING) { //链环闪电
                         distanceToDetect += attack.numAttacked * 85000;
+                    } else if (attack.skill == ChiefBandit.ASSAULTER || attack.skill == Corsair.AERIAL_STRIKE) { //落叶斩 、 地毯式空袭
+                        distanceToDetect += 80000;
+                    } else if (attack.skill == ChiefBandit.BAND_OF_THIEVES) { //分身术
+                        distanceToDetect += 150000;
                     }
 
                     if (player.getAutoBanManager().useAntiCheat() && distance > distanceToDetect * 1.15) { //如果距离超过检测距离1.15倍

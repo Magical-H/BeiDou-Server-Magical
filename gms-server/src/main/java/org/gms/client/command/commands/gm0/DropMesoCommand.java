@@ -31,7 +31,8 @@ public class DropMesoCommand extends Command {
             player.yellowMessage(text);
             return;
         } else if (Server.getInstance().getCurrentTime() - Sleep < CD) {
-            player.dropMessage(5,"指令冷却中，剩余 " + Math.round((CD - (Server.getInstance().getCurrentTime() - Sleep)) / 1000.0f ) + " 秒");
+            double remainingSeconds = (CD - (Server.getInstance().getCurrentTime() - Sleep)) / 1000.0;
+            player.dropMessage(5, "指令冷却中，剩余 " + String.format("%.2f", remainingSeconds) + " 秒");
             return;
         }
         Sleep = Server.getInstance().getCurrentTime();

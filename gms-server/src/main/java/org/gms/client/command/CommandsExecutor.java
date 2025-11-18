@@ -403,4 +403,12 @@ public class CommandsExecutor {
         commandsNameDesc.add(levelCommandsCursor);
     }
 
+    /**
+     * 获取命令
+     * @param name 命令名
+     * @return 命令，不存在则为null
+     */
+    public Command getCommand(String name) {
+        return registeredCommands.get(name);
+    }
 }

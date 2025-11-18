@@ -24,6 +24,8 @@ package org.gms.net.server.channel.handlers;
 import org.gms.client.Character;
 import org.gms.client.Client;
 import org.gms.client.autoban.AutobanFactory;
+import org.gms.client.command.CommandsExecutor;
+import org.gms.config.GameConfig;
 import org.gms.net.AbstractPacketHandler;
 import org.gms.net.packet.InPacket;
 import org.slf4j.Logger;
@@ -38,7 +40,7 @@ import org.gms.util.PacketCreator.WhisperFlag;
 public final class WhisperHandler extends AbstractPacketHandler {
     private static final Logger log = LoggerFactory.getLogger(WhisperHandler.class);
 
-    // result types, not sure if there are proper names for these
+    // 结果类型，不确定是否有正确的名称
     public static final byte RT_ITC = 0x00;
     public static final byte RT_SAME_CHANNEL = 0x01;
     public static final byte RT_CASH_SHOP = 0x02;
@@ -46,29 +48,30 @@ public final class WhisperHandler extends AbstractPacketHandler {
 
     @Override
     public void handlePacket(InPacket p, Client c) {
-        byte request = p.readByte();
-        String name = p.readString();
-        Character target = c.getWorldServer().getPlayerStorage().getCharacterByName(name);
-
+        byte request = p.readByte(); // 读取请求类型
+        String name = p.readString(); // 读取目标玩家名称
+        Character target = c.getWorldServer().getPlayerStorage().getCharacterByName(name); // 根据名称获取目标玩家对象
+        // 如果目标玩家不存在
         if (target == null) {
-            c.sendPacket(PacketCreator.getWhisperResult(name, false));
-            return;
+            c.sendPacket(PacketCreator.getWhisperResult(name, false)); // 向客户端发送查找失败的结果
+            return; // 结束方法执行
         }
 
-        switch (request) {
-            case WhisperFlag.LOCATION | WhisperFlag.REQUEST:
-                handleFind(c.getPlayer(), target, WhisperFlag.LOCATION);
-                break;
-            case WhisperFlag.WHISPER | WhisperFlag.REQUEST:
-                String message = p.readString();
-                handleWhisper(message, c.getPlayer(), target);
-                break;
-            case WhisperFlag.LOCATION_FRIEND | WhisperFlag.REQUEST:
-                handleFind(c.getPlayer(), target, WhisperFlag.LOCATION_FRIEND);
-                break;
-            default:
-                log.warn("Unknown request {} triggered by {}", request, c.getPlayer().getName());
-                break;
+        switch (request) { // 根据请求类型进行不同的处理
+            case WhisperFlag.LOCATION | WhisperFlag.REQUEST -> {// 处理查找玩家位置请求
+                if (CommandsExecutor.getInstance().getCommand("online") != null) { // 检查服务器配置是否允许查找
+                    handleFind(c.getPlayer(), target, WhisperFlag.LOCATION); // 执行查找玩家位置逻辑
+                } else {
+                    c.getPlayer().dropMessage(5,"找人指令已被禁用");
+                }
+            }
+            case WhisperFlag.WHISPER | WhisperFlag.REQUEST -> {// 处理发送悄悄话请求
+                String message = p.readString(); // 读取悄悄话内容
+                handleWhisper(message, c.getPlayer(), target); // 执行发送悄悄话逻辑
+            }
+            case WhisperFlag.LOCATION_FRIEND | WhisperFlag.REQUEST -> handleFind(c.getPlayer(), target, WhisperFlag.LOCATION_FRIEND); // 执行查找好友位置逻辑
+            // 处理未知请求类型
+            default -> log.warn("未知请求 {} 由 {} 触发", request, c.getPlayer().getName()); // 记录警告日志
         }
     }
 
@@ -82,7 +85,7 @@ public final class WhisperHandler extends AbstractPacketHandler {
                 user.sendPacket(PacketCreator.getFindResult(target, RT_DIFFERENT_CHANNEL, target.getClient().getChannel() - 1, flag));
             }
         } else {
-            // not found for whisper is the same message
+            // 对于悄悄话来说，未找到的结果是相同的消息
             user.sendPacket(PacketCreator.getWhisperResult(target.getName(), false));
         }
     }
@@ -94,13 +97,13 @@ public final class WhisperHandler extends AbstractPacketHandler {
         user.getAutoBanManager().spam(7);
 
         if (message.length() > Byte.MAX_VALUE) {
-            AutobanFactory.PACKET_EDIT.alert(user, user.getName() + " tried to packet edit with whispers.");
-            log.warn("Chr {} tried to send text with length of {}", user.getName(), message.length());
+            AutobanFactory.PACKET_EDIT.alert(user, user.getName() + " 尝试通过悄悄话功能修改数据包。");
+            log.warn("角色 {} 尝试发送长度为 {} 的文本", user.getName(), message.length());
             user.getClient().disconnect(true, false);
             return;
         }
 
-        ChatLogger.log(user.getClient(), "Whisper To " + target.getName(), message);
+        ChatLogger.log(user.getClient(), "悄悄话发送至 " + target.getName(), message);
 
         target.sendPacket(PacketCreator.getWhisperReceive(user.getName(), user.getClient().getChannel() - 1, user.isGM(), message));
 

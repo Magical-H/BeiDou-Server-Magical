@@ -124,9 +124,16 @@ public class NPCScriptManager extends AbstractScriptManager {
                 ScriptEngine engine = null;
                 if (!itemScript) {
                     if (fileName != null) {
-                        engine = getInvocableScriptEngine("npc/" + fileName + ".js", c);
-                        if (engine == null) {
-                            engine = getInvocableScriptEngine("BeiDouSpecial/" + fileName + ".js", c);
+                        // 检查fileName是否已经包含路径前缀
+                        if (fileName.startsWith("BeiDouSpecial/")) {
+                            // 如果已经包含BeiDouSpecial/前缀，直接使用
+                            engine = getInvocableScriptEngine(fileName + ".js", c);
+                        } else {
+                            // 否则按照原有逻辑尝试
+                            engine = getInvocableScriptEngine("npc/" + fileName + ".js", c);
+                            if (engine == null) {
+                                engine = getInvocableScriptEngine("BeiDouSpecial/" + fileName + ".js", c);
+                            }
                         }
                     }
                 } else {

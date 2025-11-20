@@ -233,11 +233,6 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
             wserv.addPlayer(player);
             player.setEnteredChannelWorld();
 
-            List<PlayerBuffValueHolder> buffs = server.getPlayerBuffStorage().getBuffsFromStorage(cid);
-            if (buffs != null) {
-                List<Pair<Long, PlayerBuffValueHolder>> timedBuffs = getLocalStartTimes(buffs);
-                player.silentGiveBuffs(timedBuffs);
-            }
 
             Map<Disease, Pair<Long, MobSkill>> diseases = server.getPlayerBuffStorage().getDiseasesFromStorage(cid);
             if (diseases != null) {
@@ -472,6 +467,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
             if (newcomer) {
                 player.setLoginTime(System.currentTimeMillis());
             }
+            player.retrieveBuff(); // 取回 buff
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
@@ -497,18 +493,5 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-    }
-
-    private static List<Pair<Long, PlayerBuffValueHolder>> getLocalStartTimes(List<PlayerBuffValueHolder> lpbvl) {
-        List<Pair<Long, PlayerBuffValueHolder>> timedBuffs = new ArrayList<>();
-        long curtime = currentServerTime();
-
-        for (PlayerBuffValueHolder pb : lpbvl) {
-            timedBuffs.add(new Pair<>(curtime - pb.usedTime, pb));
-        }
-
-        timedBuffs.sort((p1, p2) -> p1.getLeft().compareTo(p2.getLeft()));
-
-        return timedBuffs;
     }
 }

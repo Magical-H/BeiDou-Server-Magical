@@ -1,41 +1,10 @@
 /*
-	This file is part of the OdinMS Maple Story Server
-    Copyright (C) 2008 Patrick Huy <patrick.huy@frz.cc>
-		       Matthias Butz <matze@odinms.de>
-		       Jan Christian Meyer <vimes@odinms.de>
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation version 3 as published by
-    the Free Software Foundation. You may not use, modify or distribute
-    this program under any other version of the GNU Affero General Public
-    License.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-/* Dr. Feeble
-	Henesys Random Eye Change.
-
-        GMS-like revised by Ronan -- contents found thanks to Mitsune (GamerBewbs), Waltzing, AyumiLove
-*/
+ 小N同学出资，江奈Mizuki整合【脸型脚本】
+ */
 var status = 0;
 var beauty = 0;
-var price = 1000000;
-var mface_r = Array(20000, 20005, 20008, 20012, 20016, 20022, 20032);
-var fface_r = Array(21000, 21002, 21008, 21014, 21020, 21024, 21029);
-var facenew = Array();
 
-function pushIfItemExists(array, itemid) {
-    if ((itemid = cm.getCosmeticItem(itemid)) != -1 && !cm.isCosmeticEquipped(itemid)) {
-        array.push(itemid);
-    }
-}
+var facenew = Array();
 
 function start() {
     status = -1;
@@ -43,44 +12,168 @@ function start() {
 }
 
 function action(mode, type, selection) {
-    if (mode < 1) {  // disposing issue with stylishs found thanks to Vcoc
+	if(mode<0){
+	cm.dispose();	
+	}
+	if(selection<0){
+        selection= Math.abs(selection);
+     }		
+    if (mode == -1)
         cm.dispose();
-    } else {
-        if (mode == 1) {
-            status++;
-        } else {
-            status--;
-        }
-        if (status == 0) {
-            cm.sendSimple("嗨，我其实不应该这样做，但是用一个#b#t5152000##k，我还是会为你做。但别忘了，结果会是随机的！\r\n#L2#整形手术：#i5152000##t5152000##l");
-        } else if (status == 1) {
-            if (selection == 2) {
-                facenew = Array();
-                if (cm.getPlayer().getGender() == 0) {
-                    for (var i = 0; i < mface_r.length; i++) {
-                        pushIfItemExists(facenew, mface_r[i] + cm.getPlayer().getFace()
-                            % 1000 - (cm.getPlayer().getFace()
-                                % 100));
-                    }
-                }
-                if (cm.getPlayer().getGender() == 1) {
-                    for (var i = 0; i < fface_r.length; i++) {
-                        pushIfItemExists(facenew, fface_r[i] + cm.getPlayer().getFace()
-                            % 1000 - (cm.getPlayer().getFace()
-                                % 100));
-                    }
-                }
-                cm.sendYesNo("如果你使用普通的优惠券，你的脸可能会变成一个随机的新样子……你还想用#b#t5152000##k来做吗？");
-            }
-        } else if (status == 2) {
+    else {
+        if (mode == 0 && status == 0) {
             cm.dispose();
-            if (cm.haveItem(5152000) == true) {
-                cm.gainItem(5152000, -1);
-                cm.setFace(facenew[Math.floor(Math.random() * facenew.length)]);
-                cm.sendOk("享受你的新面容吧！");
-            } else {
-                cm.sendOk("嗯...看起来你没有这个地方专门的优惠券。很抱歉要说这个，但没有优惠券，你就不能进行整形手术了...");
-            }
+            return;
         }
+        if (mode == 1)
+            status++;
+        else
+            status--;
+        if (status == 0) {
+			var text ="";
+            text +="  Hi~ 那边的冒险者！我是时间上手艺最好的整容高人哈. 如果你有 #b#i5152001##t5152001##k 我就可以为你整容哦。 \r\n\r\n"
+			//text += " #L1000#购买 #b#i5152001##t5152001#(#r1000#k点卷)#l\r\n\r\n\r\n";
+			if (cm.getPlayer().getGender() ==0) {//男 
+				
+ 			text += "#L1# 指定脸型第 #r1#k 版(男用)#L2# 指定脸型第 #r2#k 版(男用)\r\n\r\n";
+			text += "#L3# 指定脸型第 #r3#k 版(男用)#L4# 指定脸型第 #r4#k 版(男用)\r\n\r\n";
+			text += "#L5# 指定脸型第 #r5#k 版(男用)#L6# 指定脸型第 #r6#k 版(男用)\r\n\r\n";
+			text += "#L7# 指定脸型第 #r7#k 版(男用)#L8# 指定脸型第 #r8#k 版(男用)\r\n\r\n";
+			text += "#L9# 指定脸型第 #r9#k 版(男用)#L10# 指定脸型第 #r10#k版(男用)\r\n\r\n";
+			text += "#L11# 指定脸型第 #r11#k版(男用)#L12# 指定脸型第 #r12#k版(男用)\r\n\r\n"; 
+			
+			}else{//女
+			text += "#L13# 指定脸型第 #r1#k 版(女用)#L14# 指定脸型第 #r2#k 版(女用)\r\n\r\n";
+			text += "#L15# 指定脸型第 #r3#k 版(女用)#L16# 指定脸型第 #r4#k 版(女用)\r\n\r\n";
+			text += "#L17# 指定脸型第 #r5#k 版(女用)#L18# 指定脸型第 #r6#k 版(女用)\r\n\r\n";
+			text += "#L19# 指定脸型第 #r7#k 版(女用)#L20# 指定脸型第 #r8#k 版(女用)\r\n\r\n";
+			text += "#L21# 指定脸型第 #r9#k 版(女用)#L22# 指定脸型第 #r10#k版(女用)\r\n\r\n";
+			text += "#L23# 指定脸型第 #r11#k版(女用)#L24# 指定脸型第 #r12#k版(女用)\r\n\r\n";		
+			}
+ 			
+
+			 
+		
+			
+			
+            cm.sendSimple(text);
+        } else if (status == 1) {
+			
+            if (selection == 1) {
+				//cm.dispose();
+				//cm.openNpc("角色美化/男脸型库/脸型库1");
+				cm.dispose();
+				cm.openNpc(1052005, "角色美化/男脸型库/脸型库1");
+            } else if (selection == 2) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库2');
+            } else if (selection == 3) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库3');
+            } else if (selection == 4) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库4');
+            } else if (selection == 5) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库5');
+            } else if (selection == 6) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库6');
+            } else if (selection == 7) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库7');
+            } else if (selection == 8) {
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库8');
+            } else if (selection == 9) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库9');
+            } else if (selection == 10) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库10');
+            } else if (selection == 11) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库11');
+            } else if (selection == 12) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/男脸型库/脸型库12');
+			
+
+
+            } else if (selection == 13) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库1');
+            } else if (selection == 14) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库2');
+            } else if (selection == 15) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库3');
+            } else if (selection == 16) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库4');
+            } else if (selection == 17) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库5');
+            } else if (selection == 18) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库6');
+            } else if (selection == 19) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库7');
+            } else if (selection == 20) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库8');
+            } else if (selection == 21) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库9');
+            } else if (selection == 22) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库10');
+            } else if (selection == 23) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库11');
+            } else if (selection == 24) {				
+				cm.dispose();
+				cm.openNpc(1052005,'角色美化/女脸型库/脸型库12');
+				
+			
+			
+			
+			
+			
+			
+			} else if (selection == 1000) {
+					
+				
+ 				if (cm.getPlayer().getCSPoints(1) > 10000){
+					cm.gainNX(-1000);
+					cm.gainItem(5152001,1);
+					cm.sendOk("购买成功！快去享受吧！");
+					status=-1;
+				} else {
+					cm.sendOk("点卷不足哦！");
+					status=-1;					
+				} 
+       
+				
+            } 
+			
+			
+			
+        } else if (status == 2){			
+			
+             cm.dispose();
+            if (cm.haveItem(5152001) == true){
+                cm.gainItem(5152001, -1);
+                cm.setFace(facenew[selection]);
+                cm.sendOk("你看看还满意吗？");
+            }else{
+				cm.sendOk("您貌似没有#b#z5152001##k..");
+			} 
+			
+        }	 		
+
+      
     }
 }

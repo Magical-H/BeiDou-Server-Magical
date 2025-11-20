@@ -54,6 +54,7 @@ import org.gms.server.maps.MapleMap;
 import org.gms.server.partyquest.PartyQuest;
 import org.gms.server.partyquest.Pyramid;
 import org.gms.server.quest.Quest;
+import org.gms.service.ItemValidator;
 import org.gms.util.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1436,8 +1437,35 @@ public class AbstractPlayerInteraction {
         return getPlayer().getCurrentOnlineTime();
     }
 
+    /**
+     * 检查指定的物品ID在客户端是否存在
+     *
+     * @param itemId 物品ID
+     * @return 如果物品存在返回true，否则返回false
+     */
+    public boolean isItemExists(int itemId) {
+        return ItemValidator.isItemExists(itemId);
+    }
 
+    /**
+     * 检查指定的物品ID在客户端是否不存在
+     *
+     * @param itemId 物品ID
+     * @return 如果物品不存在返回true，否则返回false
+     */
+    public boolean isItemNotExists(int itemId) {
+        return ItemValidator.isItemNotExists(itemId);
+    }
 
+    /**
+     * 获取物品名称，如果物品不存在则返回null
+     *
+     * @param itemId 物品ID
+     * @return 物品名称，如果物品不存在则返回null
+     */
+    public String getItemName(int itemId) {
+        return ItemValidator.getItemName(itemId);
+    }
 
 
 }

@@ -3406,7 +3406,8 @@ public class Character extends AbstractCharacterObject {
                 for (BuffStatValueHolder mbsvh : bel.values()) {
                     int srcid = mbsvh.effect.getBuffSourceId();
                     if (!ret.containsKey(srcid)) {
-                        ret.put(srcid, new PlayerBuffValueHolder((int) (curtime - mbsvh.startTime), mbsvh.effect));
+                        //ret.put(srcid, new PlayerBuffValueHolder((int) (curtime - mbsvh.startTime), mbsvh.effect));
+                        ret.put(srcid, new PlayerBuffValueHolder((int) (curtime - mbsvh.startTime), mbsvh.startTime, mbsvh.effect));
                     }
                 }
             }
@@ -3415,6 +3416,46 @@ public class Character extends AbstractCharacterObject {
             chrLock.unlock();
             effLock.unlock();
         }
+    }
+
+    public void retrieveBuff() {
+        // 取回死前保存的 buff
+        List<PlayerBuffValueHolder> buffs = Server.getInstance().getPlayerBuffStorage().getBuffsFromStorage(id);
+        if (buffs != null) {
+            List<Pair<Long, PlayerBuffValueHolder>> timedBuffs = getOriginalStartTimes(buffs);
+            silentGiveBuffs(timedBuffs); // 服务端buff重新生效
+            clientRebuildBuffIcon(timedBuffs); // 客户端buff重新生效
+        }
+    }
+
+    /**
+     * 给客户端重新发送 buff
+     */
+    public void clientRebuildBuffIcon(List<Pair<Long, PlayerBuffValueHolder>> timedBuffs) {
+        // 重建 buff 图标
+        for (Pair<Long, PlayerBuffValueHolder> mbsv : timedBuffs) {
+            PlayerBuffValueHolder mbsvh = mbsv.getRight();
+            boolean isSkill = mbsvh.effect.isSkill();
+            int sourceId = mbsvh.effect.getSourceId();
+            long localStartTime = mbsv.getLeft();
+            int localDuration = mbsvh.effect.alchemistModifyVal(this, mbsvh.effect.getBuffLocalDuration(), false);
+            int remainingTime = (int) (localStartTime + localDuration - Server.getInstance().getCurrentTime());
+            Packet buff = PacketCreator.giveBuff((isSkill ? sourceId : -sourceId), remainingTime, mbsvh.effect.getStatups());
+            sendPacket(buff);
+        }
+
+    }
+
+    private static List<Pair<Long, PlayerBuffValueHolder>> getOriginalStartTimes(List<PlayerBuffValueHolder> lpbvl) {
+        List<Pair<Long, PlayerBuffValueHolder>> timedBuffs = new ArrayList<>();
+
+        for (PlayerBuffValueHolder pb : lpbvl) {
+            timedBuffs.add(new Pair<>(pb.startTime, pb));
+        }
+
+        timedBuffs.sort(Comparator.comparing(Pair::getLeft));
+
+        return timedBuffs;
     }
 
     public boolean hasBuffFromSourceid(int sourceid) {
@@ -6807,6 +6848,7 @@ public class Character extends AbstractCharacterObject {
     }
 
     private void playerDead() {
+        Server.getInstance().getPlayerBuffStorage().addBuffsToStorage(id, getAllBuffs()); // 保存 buff
         if (this.getMap().isCPQMap()) {
             int losing = getMap().getDeathCP();
             if (getCP() < losing) {

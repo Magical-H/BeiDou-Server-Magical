@@ -115,6 +115,7 @@ public final class ChangeMapHandler extends AbstractPacketHandler {
                             chr.respawn(map.getReturnMapId());
                         }
                     }
+                    chr.retrieveBuff(); // 取回 buff
                 } else {
                     if (chr.isGM()) {
                         MapleMap to = chr.getWarpMap(targetMapId);

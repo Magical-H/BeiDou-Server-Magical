@@ -5,9 +5,12 @@
       :node="node"
       :edit-mode="editMode"
       :parent-is-array="parentIsArray"
-      @change="$emit('change')"
-      @duplicate="$emit('duplicate', $event)"
-      @remove="$emit('remove', $event)"
+      :search-hit="searchResultSet.has(node.id)"
+      :search-active="node.id === activeSearchId"
+      :search-keyword="searchKeyword"
+      @change="emit('change')"
+      @duplicate="emit('duplicate', $event)"
+      @remove="emit('remove', $event)"
     />
     <template v-if="isContainer && node.expanded">
       <draggable
@@ -27,9 +30,12 @@
               :parent-is-array="node.type === 'array'"
               :sibling-index="index"
               :sibling-count="node.children.length"
-              @change="$emit('change')"
-              @duplicate="$emit('duplicate', $event)"
-              @remove="$emit('remove', $event)"
+              :search-result-set="searchResultSet"
+              :active-search-id="activeSearchId"
+              :search-keyword="searchKeyword"
+              @change="emit('change')"
+              @duplicate="emit('duplicate', $event)"
+              @remove="emit('remove', $event)"
             />
           </div>
         </template>
@@ -61,6 +67,9 @@
     parentIsArray?: boolean;
     siblingIndex?: number;
     siblingCount?: number;
+    searchResultSet: Set<string>;
+    activeSearchId: string;
+    searchKeyword: string;
   }>();
 
   const emit = defineEmits<{

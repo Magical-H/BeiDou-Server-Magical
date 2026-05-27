@@ -2,56 +2,55 @@
   <div class="json-tree-panel">
     <!-- 工具栏 -->
     <div class="json-tree-toolbar">
-      <a-button size="small" @click="$emit('expandAll')">
+      <a-button size="mini" @click="emit('expandAll')">
         {{ $t('config.json.expand') }}
       </a-button>
-      <a-button size="small" @click="$emit('collapseAll')">
+      <a-button size="mini" @click="emit('collapseAll')">
         {{ $t('config.json.collapse') }}
       </a-button>
       <a-button
-        size="small"
+        size="mini"
         :type="editMode ? 'primary' : 'outline'"
-        @click="$emit('toggleEditMode')"
+        @click="emit('toggleEditMode')"
       >
         {{
           editMode ? $t('config.json.doneEdit') : $t('config.json.startEdit')
         }}
       </a-button>
       <a-divider direction="vertical" />
-      <a-button size="small" :disabled="!canUndo" @click="$emit('undo')">
+      <a-button size="mini" :disabled="!canUndo" @click="emit('undo')">
         {{ $t('config.json.undo') }}
       </a-button>
-      <a-button size="small" :disabled="!canRedo" @click="$emit('redo')">
+      <a-button size="mini" :disabled="!canRedo" @click="emit('redo')">
         {{ $t('config.json.redo') }}
       </a-button>
       <a-divider direction="vertical" />
       <a-input-search
-        :model-value="searchKeyword"
-        size="small"
+        v-model="localKeyword"
+        size="mini"
         allow-clear
         :style="{ width: '200px' }"
         :placeholder="$t('config.json.searchPlaceholder')"
-        @search="$emit('search', $event)"
-        @clear="$emit('search', '')"
+        @search="emit('search', localKeyword)"
+        @press-enter="emit('search', localKeyword)"
+        @clear="emit('search', '')"
       />
       <a-button
-        size="small"
+        size="mini"
         type="text"
-        :disabled="searchResultCount === 0"
-        @click="$emit('prevResult')"
+        :disabled="searchResultIds.length === 0"
+        @click="emit('prevResult')"
+        >▲</a-button
       >
-        ◀
-      </a-button>
       <a-button
-        size="small"
+        size="mini"
         type="text"
-        :disabled="searchResultCount === 0"
-        @click="$emit('nextResult')"
+        :disabled="searchResultIds.length === 0"
+        @click="emit('nextResult')"
+        >▼</a-button
       >
-        ▶
-      </a-button>
-      <span v-if="searchResultCount > 0" class="json-tree-search-count">
-        {{ searchIndex + 1 }}/{{ searchResultCount }}
+      <span v-if="searchResultIds.length > 0" class="json-tree-search-count">
+        {{ searchIndex + 1 }}/{{ searchResultIds.length }}
       </span>
     </div>
 
@@ -67,9 +66,12 @@
           :node="rootNode"
           :edit-mode="editMode"
           :root="true"
-          @change="$emit('treeChange')"
-          @duplicate="$emit('duplicateNode', $event)"
-          @remove="$emit('removeNode', $event)"
+          :search-hit="searchResultSet.has(rootNode.id)"
+          :search-active="rootNode.id === activeSearchId"
+          :search-keyword="searchKeyword"
+          @change="emit('treeChange')"
+          @duplicate="emit('duplicateNode', $event)"
+          @remove="emit('removeNode', $event)"
         />
         <template v-if="rootNode.expanded">
           <TreeNodeChildren
@@ -79,9 +81,12 @@
             :edit-mode="editMode"
             :parent="rootNode"
             :parent-is-array="rootNode.type === 'array'"
-            @change="$emit('treeChange')"
-            @duplicate="$emit('duplicateNode', $event)"
-            @remove="$emit('removeNode', $event)"
+            :search-result-set="searchResultSet"
+            :active-search-id="activeSearchId"
+            :search-keyword="searchKeyword"
+            @change="emit('treeChange')"
+            @duplicate="emit('duplicateNode', $event)"
+            @remove="emit('removeNode', $event)"
           />
         </template>
       </template>
@@ -91,21 +96,22 @@
 </template>
 
 <script setup lang="ts">
+  import { computed, ref, watch } from 'vue';
   import JsonTreeNodeRow from './JsonTreeNodeRow.vue';
   import TreeNodeChildren from './TreeNodeChildren.vue';
   import type { JsonTreeNodeData } from './json-editor-types';
 
-  defineProps<{
+  const props = defineProps<{
     rootNode: JsonTreeNodeData | null;
     editMode: boolean;
     canUndo: boolean;
     canRedo: boolean;
     searchKeyword: string;
-    searchResultCount: number;
+    searchResultIds: string[];
     searchIndex: number;
   }>();
 
-  defineEmits<{
+  const emit = defineEmits<{
     expandAll: [];
     collapseAll: [];
     toggleEditMode: [];
@@ -118,6 +124,19 @@
     duplicateNode: [nodeId: string];
     removeNode: [nodeId: string];
   }>();
+
+  const localKeyword = ref(props.searchKeyword);
+  watch(
+    () => props.searchKeyword,
+    (v) => {
+      localKeyword.value = v;
+    }
+  );
+
+  const searchResultSet = computed(() => new Set(props.searchResultIds));
+  const activeSearchId = computed(
+    () => props.searchResultIds[props.searchIndex] ?? ''
+  );
 </script>
 
 <script lang="ts">

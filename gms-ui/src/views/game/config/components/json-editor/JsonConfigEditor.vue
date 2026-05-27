@@ -19,7 +19,7 @@
           :can-undo="history.canUndo"
           :can-redo="history.canRedo"
           :search-keyword="searchKeyword"
-          :search-result-count="searchResultIds.length"
+          :search-result-ids="searchResultIds"
           :search-index="searchIndex"
           @expand-all="expandAll"
           @collapse-all="collapseAll"

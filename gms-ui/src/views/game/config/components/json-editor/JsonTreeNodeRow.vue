@@ -1,5 +1,13 @@
 <template>
-  <div class="json-tree-row" :class="{ 'json-tree-row--root': root }">
+  <!-- eslint-disable vue/no-v-html -->
+  <div
+    class="json-tree-row"
+    :class="{
+      'json-tree-row--root': root,
+      'json-tree-row--search-hit': searchHit,
+      'json-tree-row--search-active': searchActive,
+    }"
+  >
     <!-- 拖拽手柄 -->
     <span v-if="editMode" class="json-tree-drag-handle" title="拖动排序"
       >⋮⋮</span
@@ -27,11 +35,15 @@
           v-if="editMode && !node.readonlyKey"
           v-model="editKey"
           class="json-tree-key-edit"
-          size="small"
+          size="mini"
           @blur="commitKey"
           @keydown.enter="($event.target as HTMLInputElement).blur()"
         />
-        <span v-else class="json-tree-key">{{ node.key }}</span>
+        <span
+          v-else
+          class="json-tree-key"
+          v-html="highlightText(node.key)"
+        ></span>
       </template>
       <span class="json-tree-colon">:</span>
     </template>
@@ -50,13 +62,15 @@
         v-if="editMode"
         v-model="editValue"
         class="json-tree-value-edit"
-        size="small"
+        size="mini"
         @blur="commitValue"
         @keydown.enter="($event.target as HTMLInputElement).blur()"
       />
-      <span v-else class="json-tree-value json-tree-value--string"
-        >"{{ node.value }}"</span
-      >
+      <span
+        v-else
+        class="json-tree-value json-tree-value--string"
+        v-html="`&quot;${highlightText(String(node.value))}&quot;`"
+      ></span>
     </template>
     <!-- number -->
     <template v-else-if="node.type === 'number'">
@@ -64,7 +78,7 @@
         v-if="editMode"
         v-model="editValue"
         class="json-tree-value-edit"
-        size="small"
+        size="mini"
         @blur="commitNumber"
         @keydown.enter="($event.target as HTMLInputElement).blur()"
       />
@@ -77,7 +91,7 @@
       <a-switch
         v-if="editMode"
         :model-value="node.value === true"
-        size="small"
+        size="mini"
         @change="commitBoolean"
       />
       <span v-else class="json-tree-value json-tree-value--boolean">{{
@@ -90,7 +104,7 @@
     <!-- 右侧操作按钮 -->
     <span v-if="editMode" class="json-tree-actions">
       <a-dropdown v-if="!root" trigger="click">
-        <a-button size="small" type="text" title="类型">
+        <a-button size="mini" type="text" title="类型">
           {{ typeLabel }}
         </a-button>
         <template #content>
@@ -116,7 +130,7 @@
       </a-dropdown>
       <a-button
         v-if="!root"
-        size="small"
+        size="mini"
         type="text"
         title="复制"
         @click="$emit('duplicate', node.id)"
@@ -125,7 +139,7 @@
       </a-button>
       <a-button
         v-if="!root"
-        size="small"
+        size="mini"
         type="text"
         title="删除"
         @click="$emit('remove', node.id)"
@@ -153,6 +167,9 @@
     editMode: boolean;
     root?: boolean;
     parentIsArray?: boolean;
+    searchHit?: boolean;
+    searchActive?: boolean;
+    searchKeyword?: string;
   }>();
 
   const emit = defineEmits<{
@@ -160,6 +177,13 @@
     duplicate: [nodeId: string];
     remove: [nodeId: string];
   }>();
+
+  const highlightText = (text: string): string => {
+    if (!props.searchKeyword || !props.searchHit) return text;
+    const kw = props.searchKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(${kw})`, 'gi');
+    return text.replace(re, '<mark class="json-search-mark">$1</mark>');
+  };
 
   const isContainer = computed(
     () => props.node.type === 'object' || props.node.type === 'array'
@@ -366,5 +390,16 @@
     gap: 0;
     margin-left: auto;
     flex-shrink: 0;
+  }
+
+  /* 搜索高亮 — 仅高亮匹配文本，支持明暗主题 */
+  :deep(.json-search-mark) {
+    background-color: rgb(var(--warning-4));
+    color: #fff;
+    border-radius: 2px;
+    padding: 0 1px;
+  }
+  .json-tree-row--search-active :deep(.json-search-mark) {
+    background-color: rgb(var(--warning-6));
   }
 </style>

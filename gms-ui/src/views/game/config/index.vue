@@ -246,7 +246,7 @@
             <!-- JSON 编辑模式 -->
             <JsonConfigEditor
               v-if="isJsonConfig(editData.configClazz)"
-              :key="editData.id || 'new'"
+              :key="editorKey"
               ref="jsonEditorRef"
               v-model="editData.configValue"
             />
@@ -374,6 +374,7 @@
   const confirmVisible = ref<boolean>(false);
   const importVisible = ref<boolean>(false);
   const jsonEditorRef = ref<InstanceType<typeof JsonConfigEditor>>();
+  const editorKey = ref(0);
 
   /** 判断配置项是否为 JSON 参数 */
   const isJsonConfig = (configClazz?: string) =>
@@ -485,6 +486,7 @@
 
   const addClick = () => {
     resetEditData();
+    editorKey.value += 1;
     editVisible.value = true;
     editTitle.value = t('button.add');
   };
@@ -501,6 +503,7 @@
     editData.configCode = record.configCode;
     editData.configValue = record.configValue;
     editData.configDesc = record.configDesc;
+    editorKey.value += 1;
     editVisible.value = true;
     editTitle.value = t('button.edit');
   };
@@ -634,5 +637,15 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: middle;
+  }
+</style>
+
+<style lang="less">
+  /* JSON 模态框全局样式 */
+  .arco-divider-vertical {
+    margin: 0 5px;
+  }
+  .arco-btn-size-mini {
+    padding: 0 8px;
   }
 </style>

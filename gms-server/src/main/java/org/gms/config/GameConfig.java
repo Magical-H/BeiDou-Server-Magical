@@ -151,9 +151,27 @@ public class GameConfig {
         return t == null ? defaultVal : t;
     }
 
+    /**
+     * 判断配置项是否为统一 JSON 类型。
+     *
+     * 约定：只有 configClazz 等于 json 时才表示 JSON 参数。
+     * json 只用于告诉前后端该值是 JSON 结构，不承载 Map、数组或 DTO 类型信息。
+     *
+     * @param clazz 数据库 game_config.config_clazz 字段
+     * @return 是否为 JSON 参数
+     */
+    private static boolean isJsonClazz(String clazz) {
+        return "json".equalsIgnoreCase(clazz);
+    }
+
     @SuppressWarnings("unchecked")
     private static <T> T getValue(JSONObject valueProp) {
         String clazz = valueProp.getString("clazz");
+        String value = valueProp.getString("value");
+        if (isJsonClazz(clazz)) {
+            return (T) value;
+        }
+
         Class<?> clz;
         try {
             clz = Class.forName(clazz);
@@ -163,7 +181,7 @@ public class GameConfig {
         try {
             return (T) valueProp.getObject("value", clz);
         } catch (JSONException e) {
-            return (T) JSONObject.parseObject(valueProp.getString("value"), clz);
+            return (T) JSONObject.parseObject(value, clz);
         }
     }
 
@@ -417,6 +435,32 @@ public class GameConfig {
             return "";
         }
         return valueProp.getString("value");
+    }
+
+    /**
+     * 获取服务级 JSON 参数原始字符串。
+     *
+     * 本方法不解析 JSON，不依赖 Spring ObjectMapper，避免 GameConfig 静态初始化阶段引入 Bean 生命周期风险。
+     * 需要强类型解析时，应在 Spring Bean 业务层使用注入的 ObjectMapper 处理。
+     *
+     * @param key 配置编码
+     * @return JSON 原始字符串；不存在时返回空字符串
+     */
+    public static String getServerJsonString(String key) {
+        return getServerString(key);
+    }
+
+    /**
+     * 获取大区级 JSON 参数原始字符串。
+     *
+     * 本方法只返回 JSON 字符串，不做强类型解析。
+     *
+     * @param worldId 大区 ID
+     * @param key 配置编码
+     * @return JSON 原始字符串；不存在时返回空字符串
+     */
+    public static String getWorldJsonString(int worldId, String key) {
+        return getWorldString(worldId, key);
     }
 
     public static boolean getWorldBoolean(int worldId, String key) {

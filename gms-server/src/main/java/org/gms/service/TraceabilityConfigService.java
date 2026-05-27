@@ -175,7 +175,7 @@ public class TraceabilityConfigService {
      */
     public void reloadConfig() {
         // 1. 从GameConfig获取原始字符串
-        String configStr = GameConfig.getServerString(CONFIG_CODE);
+        String configStr = GameConfig.getServerJsonString(CONFIG_CODE);
 
         // 2. 如果字符串为空，返回静态的、已解析好的默认配置 (恢复原始逻辑)
         if (configStr == null || configStr.isEmpty() || configStr.equals("{}")) {

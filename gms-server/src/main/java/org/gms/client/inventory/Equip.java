@@ -422,7 +422,7 @@ public class Equip extends Item {
         }
         if (GameConfig.getServerBoolean("use_equipment_level_up_vicious") && vicious > 0) { // 金锤子已使用次数大于0时
             double[][] chanceList = {{0, 255, 0.1}};
-            String chanceParam = GameConfig.getServerString("use_equipment_level_up_vicious_levelrange_chance");
+            String chanceParam = GameConfig.getServerJsonString("use_equipment_level_up_vicious_levelrange_chance");
             if(chanceParam != null) {
                 try {
                     chanceList = JSONObject.parseObject(chanceParam, double[][].class);

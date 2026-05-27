@@ -46,11 +46,12 @@
     "nprogress": "^0.2.0",
     "pinia": "^2.0.23",
     "query-string": "^8.0.3",
-    "sortablejs": "^1.15.6",
+    "sortablejs": "^1.15.7",
     "vue": "^3.2.40",
     "vue-echarts": "^6.7.3",
     "vue-i18n": "^9.13.1",
-    "vue-router": "^4.0.14"
+    "vue-router": "^4.0.14",
+    "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
     "@arco-plugins/vite-vue": "^1.4.5",

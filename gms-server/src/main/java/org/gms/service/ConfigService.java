@@ -3,6 +3,8 @@ package org.gms.service;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.row.Db;
@@ -49,6 +51,7 @@ public class ConfigService {
     private final GameConfigMapper gameConfigMapper;
     private final ServiceProperty serviceProperty;
     private final LangResourceService langResourceService;
+    private final ObjectMapper objectMapper;
 
     public List<GameConfigDO> loadGameConfigs() {
         return gameConfigMapper.selectAll();
@@ -90,6 +93,9 @@ public class ConfigService {
         RequireUtil.requireNotEmpty(condition.getConfigSubType(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configSubType"));
         RequireUtil.requireNotEmpty(condition.getConfigCode(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configCode"));
         RequireUtil.requireNotEmpty(condition.getConfigValue(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configValue"));
+        if ("json".equalsIgnoreCase(condition.getConfigClazz())) {
+            validateJsonConfigValue(condition.getConfigValue());
+        }
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .where(GAME_CONFIG_DO.CONFIG_TYPE.eq(condition.getConfigType()))
                 .and(GAME_CONFIG_DO.CONFIG_CODE.eq(condition.getConfigCode()));
@@ -170,6 +176,9 @@ public class ConfigService {
         RequireUtil.requireNotNull(condition.getId(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_NULL", "id"));
         RequireUtil.requireNotEmpty(condition.getConfigValue(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configValue"));
         GameConfigDO gameConfigDO = gameConfigMapper.selectOneById(condition.getId());
+        if ("json".equalsIgnoreCase(gameConfigDO.getConfigClazz())) {
+            validateJsonConfigValue(condition.getConfigValue());
+        }
         langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
                 .langBase("game_config")
                 .langCode(gameConfigDO.getConfigCode())
@@ -309,6 +318,84 @@ public class ConfigService {
         return src;
     }
 
+    /**
+     * 校验 JSON 参数值是否为标准 JSON。
+     *
+     * GameConfig JSON 参数统一使用 configClazz=json 标记。
+     * 保存前必须校验 configValue，防止非法 JSON 写入数据库后影响前端编辑和业务解析。
+     *
+     * @param configValue 待保存的 JSON 字符串
+     */
+    private void validateJsonConfigValue(String configValue) {
+        try {
+            objectMapper.readTree(configValue);
+        } catch (JsonProcessingException e) {
+            throw new BizException("JSON 格式错误，请检查后再保存");
+        }
+    }
+
+    /**
+     * 将对象写出为标准 JSON 字符串。
+     *
+     * 使用项目统一 Jackson ObjectMapper，禁止写出 JSONC、尾逗号或非标准 JSON。
+     *
+     * @param value 待写出的对象
+     * @return 标准 JSON 字符串
+     */
+    public String writeJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new BizException("JSON 写出失败");
+        }
+    }
+
+    /**
+     * 按 Class 读取 JSON 参数。
+     *
+     * @param configCode 配置编码
+     * @param clazz      目标类型
+     * @param defaultValue 默认值
+     * @param <T>        目标类型
+     * @return 解析后的对象；缺失或解析失败时返回默认值
+     */
+    public <T> T readJson(String configCode, Class<T> clazz, T defaultValue) {
+        String json = GameConfig.getServerJsonString(configCode);
+        if (json.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return objectMapper.readValue(json, clazz);
+        } catch (JsonProcessingException e) {
+            log.warn("JSON 参数 {} 解析失败，使用默认值", configCode, e);
+            return defaultValue;
+        }
+    }
+
+    /**
+     * 按 Jackson TypeReference 读取泛型 JSON 参数。
+     *
+     * @param configCode    配置编码
+     * @param typeReference Jackson TypeReference
+     * @param defaultValue  默认值
+     * @param <T>           目标泛型类型
+     * @return 解析后的对象；缺失或解析失败时返回默认值
+     */
+    public <T> T readJson(String configCode,
+                          com.fasterxml.jackson.core.type.TypeReference<T> typeReference,
+                          T defaultValue) {
+        String json = GameConfig.getServerJsonString(configCode);
+        if (json.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return objectMapper.readValue(json, typeReference);
+        } catch (JsonProcessingException e) {
+            log.warn("JSON 参数 {} 解析失败，使用默认值", configCode, e);
+            return defaultValue;
+        }
+    }
+
     public ResponseEntity<Resource> exportYml() {
         List<GameConfigDO> gameConfigDOS = loadGameConfigs();
         // 转成yml格式
@@ -367,6 +454,13 @@ public class ConfigService {
             } else if ("java.lang.Float".equals(config.getConfigClazz()) || "java.lang.Double".equals(config.getConfigClazz())) {
                 // 为避免科学计数，用BigDecimal
                 return new BigDecimal(config.getConfigValue());
+            } else if ("json".equalsIgnoreCase(config.getConfigClazz())) {
+                // JSON 类型：用 Jackson 解析为结构化对象，使 YAML 导出格式正确
+                try {
+                    return objectMapper.readValue(config.getConfigValue(), Object.class);
+                } catch (Exception e) {
+                    return config.getConfigValue();
+                }
             } else {
                 try {
                     return JSONObject.parseObject(config.getConfigValue(), Class.forName(config.getConfigClazz()));

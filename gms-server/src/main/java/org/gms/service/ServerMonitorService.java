@@ -199,7 +199,16 @@ public class ServerMonitorService {
     }
 
     public CpuMonitorConfigDTO getCpuMonitorConfig() {
-        CpuMonitorConfigDTO config = GameConfig.get("server", CPU_MON_CONFIG_SUB_TYPE, CPU_MON_CONFIG_CODE, null);
+        // 显式使用 Jackson ObjectMapper 解析 JSON 配置，不再依赖 config_clazz 表达 DTO 类型
+        String json = GameConfig.getServerJsonString(CPU_MON_CONFIG_CODE);
+        CpuMonitorConfigDTO config = null;
+        if (!json.isEmpty()) {
+            try {
+                config = objectMapper.readValue(json, CpuMonitorConfigDTO.class);
+            } catch (JsonProcessingException e) {
+                log.warn("CPU 监控配置 JSON 解析失败，使用默认配置", e);
+            }
+        }
         CpuMonitorConfigDTO normalized = cpuAnomalyDetector.normalize(config);
         if (config == null || !Objects.equals(writeJson(config), writeJson(normalized))) {
             persistCpuMonitorConfig(normalized);
@@ -221,7 +230,7 @@ public class ServerMonitorService {
         configService.upsertServerConfig(
                 CPU_MON_CONFIG_SUB_TYPE,
                 CPU_MON_CONFIG_CODE,
-                CpuMonitorConfigDTO.class.getName(),
+                "json",
                 json,
                 CPU_MON_CONFIG_DESC
         );

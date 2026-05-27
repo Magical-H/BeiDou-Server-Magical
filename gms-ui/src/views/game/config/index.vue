@@ -126,9 +126,24 @@
           <a-table-column
             :title="$t('config.column.value')"
             data-index="configValue"
-            :width="100"
+            :width="140"
             align="center"
-          />
+          >
+            <template #cell="{ record }">
+              <a-tooltip
+                v-if="record.configValue && record.configValue.length > 60"
+                :content="record.configValue"
+                position="top"
+              >
+                <span class="config-value-cell"
+                  >{{ record.configValue.substring(0, 60) }}...</span
+                >
+              </a-tooltip>
+              <span v-else class="config-value-cell">{{
+                record.configValue
+              }}</span>
+            </template>
+          </a-table-column>
           <a-table-column
             :title="$t('config.column.desc')"
             data-index="configDesc"
@@ -162,7 +177,7 @@
       />
       <a-modal
         v-model:visible="editVisible"
-        :width="450"
+        :width="isJsonConfig(editData.configClazz) ? 1180 : 450"
         :title="editTitle"
         draggable
         :ok-text="$t('button.submit')"
@@ -228,18 +243,27 @@
             :label="$t('config.column.value')"
             :required="true"
           >
-            <!-- 小数也用字符串输入，避免进行小数点精确 -->
-            <a-input
-              v-if="getClzType(editData.configClazz) !== 'bool'"
+            <!-- JSON 编辑模式 -->
+            <JsonConfigEditor
+              v-if="isJsonConfig(editData.configClazz)"
+              :key="editData.id || 'new'"
+              ref="jsonEditorRef"
               v-model="editData.configValue"
-              :max-length="256"
             />
-            <a-switch
-              v-if="getClzType(editData.configClazz) === 'bool'"
-              v-model="editData.configValue"
-              checked-value="true"
-              unchecked-value="false"
-            />
+            <!-- 普通编辑模式 -->
+            <template v-else>
+              <a-input
+                v-if="getClzType(editData.configClazz) !== 'bool'"
+                v-model="editData.configValue"
+                :max-length="256"
+              />
+              <a-switch
+                v-if="getClzType(editData.configClazz) === 'bool'"
+                v-model="editData.configValue"
+                checked-value="true"
+                unchecked-value="false"
+              />
+            </template>
           </a-form-item>
           <a-form-item field="configDesc" :label="$t('config.column.desc')">
             <a-textarea v-model="editData.configDesc" :max-length="500" />
@@ -302,6 +326,7 @@
   import { useI18n } from 'vue-i18n';
   import useLoading from '@/hooks/loading';
   import { FileItem, RequestOption } from '@arco-design/web-vue';
+  import JsonConfigEditor from './components/json-editor/JsonConfigEditor.vue';
 
   const { t } = useI18n();
   const types = ref<string[]>([]);
@@ -335,6 +360,7 @@
     'java.lang.String',
     'java.lang.Float',
     'java.lang.Boolean',
+    'json',
   ]);
   const clzFull = ref<string[]>([
     ...clzTypes.value,
@@ -343,9 +369,15 @@
     'java.lang.Short',
     'java.lang.Double',
     'java.util.Map',
+    'json',
   ]);
   const confirmVisible = ref<boolean>(false);
   const importVisible = ref<boolean>(false);
+  const jsonEditorRef = ref<InstanceType<typeof JsonConfigEditor>>();
+
+  /** 判断配置项是否为 JSON 参数 */
+  const isJsonConfig = (configClazz?: string) =>
+    configClazz?.toLowerCase() === 'json';
   const uploadRef = ref();
   const fileList = ref<FileItem[]>([]);
 
@@ -474,6 +506,13 @@
   };
 
   const editOk = async () => {
+    if (isJsonConfig(editData.configClazz)) {
+      const jsonText = jsonEditorRef.value?.getSubmitValue();
+      if (!jsonText) {
+        return;
+      }
+      editData.configValue = jsonText;
+    }
     if (editData.id) {
       await updateConfig(editData);
     } else {
@@ -585,5 +624,15 @@
   }
   :deep(.arco-table-th:nth-child(7)) {
     min-width: 250px;
+  }
+
+  /* 表格参数值截断 */
+  .config-value-cell {
+    display: inline-block;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
   }
 </style>

@@ -1,13 +1,13 @@
 <template>
   <div class="json-source-panel">
     <div class="json-source-toolbar">
-      <a-button size="mini" @click="$emit('format')">
+      <a-button size="small" @click="$emit('format')">
         {{ $t('config.json.format') }}
       </a-button>
-      <a-button size="mini" @click="$emit('compact')">
+      <a-button size="small" @click="$emit('compact')">
         {{ $t('config.json.compact') }}
       </a-button>
-      <a-button size="mini" type="primary" @click="$emit('parse')">
+      <a-button size="small" type="primary" @click="$emit('parse')">
         {{ $t('config.json.parseJson') }}
       </a-button>
     </div>

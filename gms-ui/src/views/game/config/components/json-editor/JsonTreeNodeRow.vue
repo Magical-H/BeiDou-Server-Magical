@@ -27,7 +27,7 @@
           v-if="editMode && !node.readonlyKey"
           v-model="editKey"
           class="json-tree-key-edit"
-          size="mini"
+          size="small"
           @blur="commitKey"
           @keydown.enter="($event.target as HTMLInputElement).blur()"
         />
@@ -50,7 +50,7 @@
         v-if="editMode"
         v-model="editValue"
         class="json-tree-value-edit"
-        size="mini"
+        size="small"
         @blur="commitValue"
         @keydown.enter="($event.target as HTMLInputElement).blur()"
       />
@@ -64,7 +64,7 @@
         v-if="editMode"
         v-model="editValue"
         class="json-tree-value-edit"
-        size="mini"
+        size="small"
         @blur="commitNumber"
         @keydown.enter="($event.target as HTMLInputElement).blur()"
       />
@@ -77,7 +77,7 @@
       <a-switch
         v-if="editMode"
         :model-value="node.value === true"
-        size="mini"
+        size="small"
         @change="commitBoolean"
       />
       <span v-else class="json-tree-value json-tree-value--boolean">{{
@@ -90,7 +90,7 @@
     <!-- 右侧操作按钮 -->
     <span v-if="editMode" class="json-tree-actions">
       <a-dropdown v-if="!root" trigger="click">
-        <a-button size="mini" type="text" title="类型">
+        <a-button size="small" type="text" title="类型">
           {{ typeLabel }}
         </a-button>
         <template #content>
@@ -116,7 +116,7 @@
       </a-dropdown>
       <a-button
         v-if="!root"
-        size="mini"
+        size="small"
         type="text"
         title="复制"
         @click="$emit('duplicate', node.id)"
@@ -125,7 +125,7 @@
       </a-button>
       <a-button
         v-if="!root"
-        size="mini"
+        size="small"
         type="text"
         title="删除"
         @click="$emit('remove', node.id)"

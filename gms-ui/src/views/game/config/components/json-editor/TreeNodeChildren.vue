@@ -19,17 +19,19 @@
         @change="handleDragChange"
       >
         <template #item="{ element, index }">
-          <TreeNodeChildren
-            :node="element"
-            :edit-mode="editMode"
-            :parent="node"
-            :parent-is-array="node.type === 'array'"
-            :sibling-index="index"
-            :sibling-count="node.children.length"
-            @change="$emit('change')"
-            @duplicate="$emit('duplicate', $event)"
-            @remove="$emit('remove', $event)"
-          />
+          <div class="json-tree-draggable-item" :data-node-id="element.id">
+            <TreeNodeChildren
+              :node="element"
+              :edit-mode="editMode"
+              :parent="node"
+              :parent-is-array="node.type === 'array'"
+              :sibling-index="index"
+              :sibling-count="node.children.length"
+              @change="$emit('change')"
+              @duplicate="$emit('duplicate', $event)"
+              @remove="$emit('remove', $event)"
+            />
+          </div>
         </template>
       </draggable>
       <!-- 新增子项按钮 -->
@@ -46,7 +48,11 @@
   import draggable from 'vuedraggable';
   import JsonTreeNodeRow from './JsonTreeNodeRow.vue';
   import type { JsonNodeType, JsonTreeNodeData } from './json-editor-types';
-  import { buildTree, createDefaultValueByType } from './json-editor-utils';
+  import {
+    buildTree,
+    createDefaultValueByType,
+    refreshNodeMeta,
+  } from './json-editor-utils';
 
   const props = defineProps<{
     node: JsonTreeNodeData;
@@ -67,15 +73,11 @@
     () => props.node.type === 'object' || props.node.type === 'array'
   );
 
-  const handleDragChange = (evt: {
-    moved?: { oldIndex: number; newIndex: number };
-  }) => {
-    // 只手动操作数组，不依赖 v-model 双向绑定，避免 Vue 与 SortableJS DOM 争夺
-    if (evt.moved) {
-      const { oldIndex, newIndex } = evt.moved;
-      const [item] = props.node.children.splice(oldIndex, 1);
-      props.node.children.splice(newIndex, 0, item);
-    }
+  const handleDragChange = () => {
+    // vuedraggable 在 :list 模式下会自动调整 node.children 顺序。
+    // 这里不能再次手动 splice，否则 DOM 顺序和数据顺序会短暂错位，
+    // 嵌套拖拽场景下会触发 vuedraggable 内部 context 为 null。
+    refreshNodeMeta(props.node, props.parent);
     emit('change');
   };
 
@@ -102,6 +104,7 @@
       readonlyKey: props.node.type === 'array',
     });
     props.node.children.push(childNode);
+    refreshNodeMeta(props.node, props.parent);
     emit('change');
   };
 </script>
@@ -123,5 +126,9 @@
     &:hover {
       color: rgb(var(--primary-6));
     }
+  }
+
+  .json-tree-draggable-item {
+    min-width: max-content;
   }
 </style>

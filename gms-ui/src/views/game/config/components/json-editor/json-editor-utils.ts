@@ -93,9 +93,14 @@ export const refreshNodeMeta = (
   parent?: JsonTreeNodeData,
   index?: number
 ): void => {
+  if (!node.id) {
+    node.id = createNodeId();
+  }
   if (parent?.type === 'array' && index !== undefined) {
     node.key = String(index);
     node.readonlyKey = true;
+  } else if (parent?.type === 'object') {
+    node.readonlyKey = false;
   }
   node.parentId = parent?.id;
   node.level = parent ? parent.level + 1 : 0;
@@ -109,6 +114,18 @@ export const refreshNodeMeta = (
   node.children.forEach((child, childIndex) => {
     refreshNodeMeta(child, node, childIndex);
   });
+};
+
+export const cloneNodeWithNewIds = (
+  node: JsonTreeNodeData
+): JsonTreeNodeData => {
+  const cloned = JSON.parse(JSON.stringify(node)) as JsonTreeNodeData;
+  const refreshIds = (current: JsonTreeNodeData): void => {
+    current.id = createNodeId();
+    current.children.forEach(refreshIds);
+  };
+  refreshIds(cloned);
+  return cloned;
 };
 
 export const createDefaultValueByType = (type: JsonNodeType): JsonValue => {

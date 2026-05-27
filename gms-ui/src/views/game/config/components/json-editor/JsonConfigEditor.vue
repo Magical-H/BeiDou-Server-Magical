@@ -73,6 +73,7 @@
     refreshNodeMeta,
     treeToJson,
     createCopyKey,
+    cloneNodeWithNewIds,
   } from './json-editor-utils';
 
   const props = defineProps<{
@@ -256,6 +257,7 @@
 
   const handleTreeChange = () => {
     if (!rootNode.value) return;
+    refreshNodeMeta(rootNode.value);
     const val = treeToJson(rootNode.value);
     sourceText.value = formatJson(val);
     parseError.value = '';
@@ -270,8 +272,7 @@
     const idx = parent.children.findIndex((c) => c.id === nodeId);
     if (idx === -1) return;
     const orig = parent.children[idx];
-    const cloned = JSON.parse(JSON.stringify(orig)) as JsonTreeNodeData;
-    cloned.id = '';
+    const cloned = cloneNodeWithNewIds(orig);
     if (parent.type === 'object') {
       cloned.key = createCopyKey(
         orig.key,

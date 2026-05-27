@@ -162,7 +162,7 @@ public class TraceabilityConfigService {
                     .configSubType("Debug") // 默认使用Debug子类型
                     .configCode(CONFIG_CODE)
                     .configValue(configValue)
-                    .configClazz(String.class.getName())
+                    .configClazz("json")
                     .configDesc("物品溯源系统规则配置 (JSON)")
                     .build();
             configService.addConfig(newConfig);

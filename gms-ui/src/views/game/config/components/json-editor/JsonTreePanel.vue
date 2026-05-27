@@ -2,14 +2,14 @@
   <div class="json-tree-panel">
     <!-- 工具栏 -->
     <div class="json-tree-toolbar">
-      <a-button size="mini" @click="$emit('expandAll')">
+      <a-button size="small" @click="$emit('expandAll')">
         {{ $t('config.json.expand') }}
       </a-button>
-      <a-button size="mini" @click="$emit('collapseAll')">
+      <a-button size="small" @click="$emit('collapseAll')">
         {{ $t('config.json.collapse') }}
       </a-button>
       <a-button
-        size="mini"
+        size="small"
         :type="editMode ? 'primary' : 'outline'"
         @click="$emit('toggleEditMode')"
       >
@@ -18,16 +18,16 @@
         }}
       </a-button>
       <a-divider direction="vertical" />
-      <a-button size="mini" :disabled="!canUndo" @click="$emit('undo')">
+      <a-button size="small" :disabled="!canUndo" @click="$emit('undo')">
         {{ $t('config.json.undo') }}
       </a-button>
-      <a-button size="mini" :disabled="!canRedo" @click="$emit('redo')">
+      <a-button size="small" :disabled="!canRedo" @click="$emit('redo')">
         {{ $t('config.json.redo') }}
       </a-button>
       <a-divider direction="vertical" />
       <a-input-search
         :model-value="searchKeyword"
-        size="mini"
+        size="small"
         allow-clear
         :style="{ width: '200px' }"
         :placeholder="$t('config.json.searchPlaceholder')"
@@ -35,7 +35,7 @@
         @clear="$emit('search', '')"
       />
       <a-button
-        size="mini"
+        size="small"
         type="text"
         :disabled="searchResultCount === 0"
         @click="$emit('prevResult')"
@@ -43,7 +43,7 @@
         ◀
       </a-button>
       <a-button
-        size="mini"
+        size="small"
         type="text"
         :disabled="searchResultCount === 0"
         @click="$emit('nextResult')"

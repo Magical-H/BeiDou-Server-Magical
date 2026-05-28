@@ -35,10 +35,10 @@
 
 下载地址：https://nodejs.org/dist/v20.15.0/node-v20.15.0-x64.msi
 
-**2 安装 Yarn**
+**2 安装 pnpm**
 
 ```shell
-npm install -g yarn
+npm install -g pnpm@7.33.7
 ```
 
 > 如提示npm命令不存在，可能是安装NodeJS时，安装程序配置的环境变量还没有生效，小白请使用重启大法
@@ -48,13 +48,13 @@ npm install -g yarn
 在命令行进入 gms-ui 目录，然后执行命令
 
 ```shell
-yarn install
+pnpm install
 ```
 
 **4 启动开发环境**
 
 ```shell
-yarn dev
+pnpm dev
 ```
 
 ## 备注

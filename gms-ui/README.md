@@ -6,18 +6,14 @@
 ## 1. 环境准备
 
 *   **Node.js**: >= 14.0.0 (推荐 16.x 或 18.x)
-*   **包管理器**: 推荐使用 `yarn` 或 `npm`
+*   **包管理器**: `pnpm@7.33.7`
 
 ## 2. 安装依赖
 
 在 `gms-ui` 根目录下执行以下命令安装所有依赖：
 
 ```bash
-# 使用 yarn (推荐)
-yarn install
-
-# 或者使用 npm
-npm install
+pnpm install
 ```
 
 ### 2.1 日志系统核心依赖
@@ -32,11 +28,7 @@ npm install
 启动本地开发服务器，支持热重载：
 
 ```bash
-# 使用 yarn
-yarn dev
-
-# 或者使用 npm
-npm run dev
+pnpm dev
 ```
 
 启动后访问: `http://localhost:3000` (端口可能根据占用情况自动调整)
@@ -46,11 +38,7 @@ npm run dev
 构建用于生产环境的静态资源文件：
 
 ```bash
-# 使用 yarn
-yarn build
-
-# 或者使用 npm
-npm run build
+pnpm build
 ```
 
 构建产物将输出到 `dist/` 目录。
@@ -88,7 +76,7 @@ server {
 
 ### 5.2 与后端集成部署 (推荐)
 本项目通常作为 Spring Boot 后端的静态资源进行部署。
-1.  执行 `yarn build` 生成 `dist/`。
+1.  执行 `pnpm build` 生成 `dist/`。
 2.  将 `dist/` 目录下的所有文件复制到后端项目的 `src/main/resources/static/` 或 `src/main/resources/public/` 目录下。
 3.  重新打包后端 JAR 文件。
 4.  启动后端服务，访问后端地址即可看到前端页面。

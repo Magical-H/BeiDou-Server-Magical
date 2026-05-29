@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import org.gms.constants.api.ApiConstant;
 import org.gms.dao.entity.GameConfigDO;
+import org.gms.model.dto.ConfigI18nDTO;
 import org.gms.model.dto.ConfigTypeDTO;
 import org.gms.model.dto.GameConfigReqDTO;
 import org.gms.model.dto.ResultBody;
@@ -40,6 +41,13 @@ public class ConfigController {
     }
 
     @Tag(name = "/config/" + ApiConstant.LATEST)
+    @Operation(summary = "get config i18n descriptions")
+    @GetMapping("/" + ApiConstant.LATEST + "/getConfigI18n/{configCode}")
+    public ResultBody<ConfigI18nDTO> getConfigI18n(@PathVariable("configCode") String configCode) {
+        return ResultBody.success(configService.getConfigI18n(configCode));
+    }
+
+    @Tag(name = "/config/" + ApiConstant.LATEST)
     @Operation(summary = "新增参数")
     @PostMapping("/" + ApiConstant.LATEST + "/addConfig")
     public ResultBody<Object> addConfig(@RequestBody SubmitBody<GameConfigDO> request) {
@@ -52,6 +60,14 @@ public class ConfigController {
     @PostMapping("/" + ApiConstant.LATEST + "/updateConfig")
     public ResultBody<Object> updateConfig(@RequestBody SubmitBody<GameConfigDO> request) {
         configService.updateConfig(request.getData());
+        return ResultBody.success(request, null);
+    }
+
+    @Tag(name = "/config/" + ApiConstant.LATEST)
+    @Operation(summary = "update config i18n descriptions")
+    @PostMapping("/" + ApiConstant.LATEST + "/updateConfigI18n")
+    public ResultBody<Object> updateConfigI18n(@RequestBody SubmitBody<ConfigI18nDTO> request) {
+        configService.updateConfigI18n(request.getData());
         return ResultBody.success(request, null);
     }
 

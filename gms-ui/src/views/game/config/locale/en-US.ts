@@ -70,6 +70,9 @@ export default {
   'config.json.editMode': 'Edit mode',
   'config.json.readMode': 'Read mode',
   'config.json.path': 'Path',
+  'config.json.nodeDesc': 'JSON Node Description',
+  'config.json.nodeDescPlaceholder':
+    '{"_self":"Description","enabled":"Whether enabled"}',
 
   'config.column.type': 'Type',
   'config.column.subType': 'Sub Type',

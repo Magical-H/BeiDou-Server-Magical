@@ -37,10 +37,10 @@
   }>();
 
   const emit = defineEmits<{
-    'update:modelValue': [value: string];
-    'format': [];
-    'compact': [];
-    'parse': [];
+    (e: 'update:modelValue', value: string): void;
+    (e: 'format'): void;
+    (e: 'compact'): void;
+    (e: 'parse'): void;
   }>();
 
   const onInput = (value: string) => {

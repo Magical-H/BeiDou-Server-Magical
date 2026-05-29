@@ -28,6 +28,8 @@ export interface JsonTreeNodeData {
   error?: string;
 }
 
+export type JsonDescriptionSchema = Record<string, unknown>;
+
 export interface JsonEditorSnapshot {
   sourceText: string;
   jsonValue: JsonValue;

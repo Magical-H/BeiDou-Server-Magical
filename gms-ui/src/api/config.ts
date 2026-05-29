@@ -19,6 +19,13 @@ export interface ConfigResult {
   configDesc: string;
 }
 
+export interface ConfigI18n {
+  configCode: string;
+  langType?: string;
+  configDesc: string;
+  jsonDesc?: string;
+}
+
 export function getConfigTypeList() {
   return axios.get('/config/v1/getConfigTypeList');
 }
@@ -27,12 +34,20 @@ export function getConfigList(data: ConfigSearch) {
   return axios.post('/config/v1/getConfigList', data);
 }
 
+export function getConfigI18n(configCode: string) {
+  return axios.get(`/config/v1/getConfigI18n/${configCode}`);
+}
+
 export function addConfig(data: ConfigResult) {
   return axios.post('/config/v1/addConfig', data);
 }
 
 export function updateConfig(data: ConfigResult) {
   return axios.post('/config/v1/updateConfig', data);
+}
+
+export function updateConfigI18n(data: ConfigI18n) {
+  return axios.post('/config/v1/updateConfigI18n', data);
 }
 
 export function batchUpdateConfig(configs: ConfigResult[]) {

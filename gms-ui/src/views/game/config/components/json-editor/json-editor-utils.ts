@@ -1,4 +1,5 @@
 import type {
+  JsonDescriptionSchema,
   JsonNodeType,
   JsonTreeNodeData,
   JsonValue,
@@ -190,3 +191,154 @@ export const compactJson = (value: JsonValue): string => JSON.stringify(value);
 
 export const parseJsonText = (text: string): JsonValue =>
   JSON.parse(text) as JsonValue;
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Object.prototype.toString.call(value) === '[object Object]';
+
+const JSON_DESC_SELF_KEY = '_self';
+const JSON_DESC_ITEM_KEY = '_item';
+const JSON_DESC_COLUMNS_KEY = '_columns';
+
+const readText = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (isPlainObject(value) && typeof value[JSON_DESC_SELF_KEY] === 'string') {
+    return value[JSON_DESC_SELF_KEY];
+  }
+  if (isPlainObject(value) && typeof value[JSON_DESC_ITEM_KEY] === 'string') {
+    return value[JSON_DESC_ITEM_KEY];
+  }
+  return '';
+};
+
+export const parseDescriptionSchema = (
+  text?: string
+): JsonDescriptionSchema | null => {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (isPlainObject(parsed)) return parsed;
+  } catch {
+    return { [JSON_DESC_SELF_KEY]: trimmed };
+  }
+  return { [JSON_DESC_SELF_KEY]: trimmed };
+};
+
+const tokenizePath = (path: string): string[] => {
+  const tokens: string[] = [];
+  path.replace(/([^[.\]]+)|\[(\d+)\]/g, (_, key: string, index: string) => {
+    tokens.push(key ?? index);
+    return '';
+  });
+  return tokens;
+};
+
+export const resolveNodeDescription = (
+  schema: JsonDescriptionSchema | null,
+  node: JsonTreeNodeData
+): string => {
+  if (!schema) return '';
+  if (!node.path) return readText(schema[JSON_DESC_SELF_KEY]);
+
+  const tokens = tokenizePath(node.path);
+  let context: unknown = schema;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (!isPlainObject(context)) return readText(context);
+
+    const token = tokens[i];
+    const nextToken = tokens[i + 1];
+    const prevToken = tokens[i - 1];
+    const last = i === tokens.length - 1;
+    const nextIsArrayIndex = nextToken !== undefined && /^\d+$/.test(nextToken);
+
+    const tokenIsArrayIndex = /^\d+$/.test(token);
+    const prevIsArrayIndex = prevToken !== undefined && /^\d+$/.test(prevToken);
+
+    if (tokenIsArrayIndex && last) {
+      const columns = context[JSON_DESC_COLUMNS_KEY];
+      if (prevIsArrayIndex && isPlainObject(columns)) {
+        return readText(columns[token]);
+      }
+      return readText(context);
+    }
+
+    if (!tokenIsArrayIndex) {
+      const directValue = context[token];
+      if (last) return readText(directValue);
+      context = nextIsArrayIndex
+        ? context[`${token}Item`] ?? directValue
+        : directValue;
+    }
+  }
+
+  return '';
+};
+
+export const updateNodeDescription = (
+  schema: JsonDescriptionSchema | null,
+  node: JsonTreeNodeData,
+  description: string
+): JsonDescriptionSchema => {
+  const nextSchema = JSON.parse(
+    JSON.stringify(schema ?? {})
+  ) as JsonDescriptionSchema;
+  const trimmed = description.trim();
+  if (!node.path) {
+    if (trimmed) {
+      nextSchema[JSON_DESC_SELF_KEY] = trimmed;
+    } else {
+      delete nextSchema[JSON_DESC_SELF_KEY];
+    }
+    return nextSchema;
+  }
+
+  const tokens = tokenizePath(node.path);
+  let context: Record<string, unknown> = nextSchema;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    const nextToken = tokens[i + 1];
+    const prevToken = tokens[i - 1];
+    const last = i === tokens.length - 1;
+    const tokenIsArrayIndex = /^\d+$/.test(token);
+    const nextIsArrayIndex = nextToken !== undefined && /^\d+$/.test(nextToken);
+    const prevIsArrayIndex = prevToken !== undefined && /^\d+$/.test(prevToken);
+
+    if (tokenIsArrayIndex) {
+      if (last) {
+        if (prevIsArrayIndex) {
+          const columns = isPlainObject(context[JSON_DESC_COLUMNS_KEY])
+            ? (context[JSON_DESC_COLUMNS_KEY] as Record<string, unknown>)
+            : {};
+          if (trimmed) {
+            columns[token] = trimmed;
+            context[JSON_DESC_COLUMNS_KEY] = columns;
+          } else {
+            delete columns[token];
+            if (Object.keys(columns).length === 0) {
+              delete context[JSON_DESC_COLUMNS_KEY];
+            }
+          }
+        } else if (trimmed) {
+          context[JSON_DESC_ITEM_KEY] = trimmed;
+        } else {
+          delete context[JSON_DESC_ITEM_KEY];
+        }
+      }
+    } else if (last) {
+      if (trimmed) {
+        context[token] = trimmed;
+      } else {
+        delete context[token];
+      }
+    } else {
+      const nextKey = nextIsArrayIndex ? `${token}Item` : token;
+      if (!isPlainObject(context[nextKey])) {
+        context[nextKey] = {};
+      }
+      context = context[nextKey] as Record<string, unknown>;
+    }
+  }
+
+  return nextSchema;
+};

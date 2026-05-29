@@ -1,7 +1,6 @@
 <template>
   <div class="json-editor">
-    <!-- 主体：左右分栏 -->
-    <div class="json-editor-body">
+    <div v-if="!mobile" class="json-editor-body">
       <div class="json-editor-left">
         <JsonSourcePanel
           v-model="sourceText"
@@ -21,6 +20,7 @@
           :search-keyword="searchKeyword"
           :search-result-ids="searchResultIds"
           :search-index="searchIndex"
+          :description-schema="descriptionSchema"
           @expand-all="expandAll"
           @collapse-all="collapseAll"
           @toggle-edit-mode="toggleEditMode"
@@ -32,9 +32,53 @@
           @tree-change="handleTreeChange"
           @duplicate-node="handleDuplicateNode"
           @remove-node="handleRemoveNode"
+          @add-root-child="handleAddRootChild"
+          @description-change="handleDescriptionChange"
         />
       </div>
     </div>
+
+    <a-tabs
+      v-else
+      class="json-editor-mobile-tabs"
+      default-active-key="tree"
+      type="capsule"
+    >
+      <a-tab-pane key="tree" :title="$t('config.json.treeTab')">
+        <JsonTreePanel
+          :root-node="rootNode"
+          :edit-mode="editMode"
+          :can-undo="history.canUndo"
+          :can-redo="history.canRedo"
+          :search-keyword="searchKeyword"
+          :search-result-ids="searchResultIds"
+          :search-index="searchIndex"
+          :description-schema="descriptionSchema"
+          @expand-all="expandAll"
+          @collapse-all="collapseAll"
+          @toggle-edit-mode="toggleEditMode"
+          @undo="handleUndo"
+          @redo="handleRedo"
+          @search="handleSearch"
+          @prev-result="prevResult"
+          @next-result="nextResult"
+          @tree-change="handleTreeChange"
+          @duplicate-node="handleDuplicateNode"
+          @remove-node="handleRemoveNode"
+          @add-root-child="handleAddRootChild"
+          @description-change="handleDescriptionChange"
+        />
+      </a-tab-pane>
+      <a-tab-pane key="source" :title="$t('config.json.sourceTab')">
+        <JsonSourcePanel
+          v-model="sourceText"
+          :parse-error="parseError"
+          @format="formatSource"
+          @compact="compactSource"
+          @parse="parseSource"
+        />
+      </a-tab-pane>
+    </a-tabs>
 
     <!-- 状态条 -->
     <div class="json-editor-status">
@@ -57,7 +101,7 @@
   import { Message } from '@arco-design/web-vue';
   import JsonSourcePanel from './JsonSourcePanel.vue';
   import JsonTreePanel from './JsonTreePanel.vue';
-  import type { JsonTreeNodeData } from './json-editor-types';
+  import type { JsonNodeType, JsonTreeNodeData } from './json-editor-types';
   import {
     JsonHistoryManager,
     createSnapshot,
@@ -72,16 +116,22 @@
     parseJsonText,
     refreshNodeMeta,
     treeToJson,
+    createDefaultValueByType,
     createCopyKey,
     cloneNodeWithNewIds,
+    parseDescriptionSchema,
+    updateNodeDescription,
   } from './json-editor-utils';
 
   const props = defineProps<{
     modelValue: string;
+    description?: string;
+    mobile?: boolean;
   }>();
 
   const emit = defineEmits<{
-    'update:modelValue': [value: string];
+    (e: 'update:modelValue', value: string): void;
+    (e: 'update:description', value: string): void;
   }>();
 
   // ---- 核心状态 ----
@@ -101,6 +151,7 @@
 
   // ---- 内部更新标志（防止 v-model 循环触发 rebuild） ----
   const isInternalUpdate = ref(false);
+  const descriptionText = ref(props.description || '');
 
   // ---- 计算属性 ----
   const jsonSize = computed(() => {
@@ -114,6 +165,12 @@
     if (!rootNode.value) return '无数据';
     return '校验通过';
   });
+
+  const descriptionSchema = computed(() =>
+    parseDescriptionSchema(descriptionText.value)
+  );
+
+  const mobile = computed(() => props.mobile === true);
 
   // ---- 初始化 ----
   const initFromString = (text: string) => {
@@ -146,6 +203,17 @@
     }
   };
 
+  // ---- 历史 ----
+  function pushHistory(reason: string) {
+    const snapshot = createSnapshot(
+      sourceText.value,
+      rootNode.value,
+      activePath.value,
+      reason
+    );
+    if (snapshot) history.push(snapshot);
+  }
+
   watch(
     () => props.modelValue,
     (val) => {
@@ -155,22 +223,18 @@
     { immediate: true }
   );
 
+  watch(
+    () => props.description,
+    (val) => {
+      descriptionText.value = val || '';
+    }
+  );
+
   onMounted(() => {
     if (props.modelValue) {
       initFromString(props.modelValue);
     }
   });
-
-  // ---- 历史 ----
-  const pushHistory = (reason: string) => {
-    const snapshot = createSnapshot(
-      sourceText.value,
-      rootNode.value,
-      activePath.value,
-      reason
-    );
-    if (snapshot) history.push(snapshot);
-  };
 
   const handleUndo = () => {
     const snap = history.undo();
@@ -295,6 +359,38 @@
     handleTreeChange();
   };
 
+  const handleAddRootChild = () => {
+    if (!rootNode.value) return;
+    const childType: JsonNodeType = 'string';
+    const childKey =
+      rootNode.value.type === 'array'
+        ? String(rootNode.value.children.length)
+        : 'newKey';
+    const childNode = buildTree(createDefaultValueByType(childType), {
+      key: childKey,
+      parentId: rootNode.value.id,
+      path: rootNode.value.type === 'array' ? `[${childKey}]` : childKey,
+      level: rootNode.value.level + 1,
+      readonlyKey: rootNode.value.type === 'array',
+    });
+    rootNode.value.children.push(childNode);
+    refreshNodeMeta(rootNode.value);
+    handleTreeChange();
+  };
+
+  const handleDescriptionChange = (
+    node: JsonTreeNodeData,
+    description: string
+  ) => {
+    const schema = updateNodeDescription(
+      descriptionSchema.value,
+      node,
+      description
+    );
+    descriptionText.value = JSON.stringify(schema);
+    emit('update:description', descriptionText.value);
+  };
+
   const findParent = (
     node: JsonTreeNodeData,
     targetId: string
@@ -378,11 +474,10 @@
     display: flex;
     gap: 0;
     height: 520px;
+  }
 
-    @media (max-width: 960px) {
-      flex-direction: column;
-      height: auto;
-    }
+  .json-editor-mobile-tabs {
+    display: block;
   }
 
   .json-editor-left {
@@ -420,5 +515,26 @@
 
   .json-editor-status-item {
     white-space: nowrap;
+  }
+
+  @media (max-width: 768px) {
+    .json-editor-mobile-tabs {
+      :deep(.arco-tabs-content) {
+        height: calc(100vh - 230px);
+        min-height: 420px;
+      }
+
+      :deep(.arco-tabs-content-list),
+      :deep(.arco-tabs-pane) {
+        height: 100%;
+      }
+    }
+
+    .json-editor-status {
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      max-height: 72px;
+      overflow: auto;
+    }
   }
 </style>

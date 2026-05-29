@@ -149,7 +149,25 @@
             data-index="configDesc"
             :width="400"
             align="center"
-          />
+          >
+            <template #cell="{ record }">
+              <a-tooltip
+                v-if="
+                  displayConfigDesc(record) &&
+                  displayConfigDesc(record).length > 60
+                "
+                :content="displayConfigDesc(record)"
+                position="top"
+              >
+                <span class="config-desc-cell">
+                  {{ displayConfigDesc(record) }}
+                </span>
+              </a-tooltip>
+              <span v-else class="config-desc-cell">
+                {{ displayConfigDesc(record) }}
+              </span>
+            </template>
+          </a-table-column>
           <a-table-column
             :title="$t('config.column.operate')"
             :width="100"
@@ -177,7 +195,8 @@
       />
       <a-modal
         v-model:visible="editVisible"
-        :width="isJsonConfig(editData.configClazz) ? 1180 : 450"
+        :width="editModalWidth"
+        :fullscreen="isJsonConfig(editData.configClazz) && isMobile"
         :title="editTitle"
         draggable
         :ok-text="$t('button.submit')"
@@ -218,7 +237,10 @@
             :required="true"
             :disabled="editData.id != null && editData.id != 0"
           >
-            <a-select v-model="editData.configClazz">
+            <a-select
+              v-model="editData.configClazz"
+              @change="configClazzChange"
+            >
               <a-option
                 v-for="clzType in editData.id != null && editData.id != 0
                   ? clzFull
@@ -249,6 +271,8 @@
               :key="editorKey"
               ref="jsonEditorRef"
               v-model="editData.configValue"
+              v-model:description="jsonDescText"
+              :mobile="isMobile"
             />
             <!-- 普通编辑模式 -->
             <template v-else>
@@ -265,8 +289,17 @@
               />
             </template>
           </a-form-item>
-          <a-form-item field="configDesc" :label="$t('config.column.desc')">
-            <a-textarea v-model="editData.configDesc" :max-length="500" />
+          <a-form-item
+            v-if="!isJsonConfig(editData.configClazz)"
+            field="configDesc"
+            :label="$t('config.column.desc')"
+          >
+            <a-textarea
+              v-model="configDescText"
+              :max-length="512"
+              show-word-limit
+              :auto-size="{ minRows: 2, maxRows: 4 }"
+            />
           </a-form-item>
         </a-form>
       </a-modal>
@@ -311,15 +344,18 @@
 </template>
 
 <script setup lang="ts">
-  import { reactive, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
   import {
     addConfig,
+    ConfigI18n,
     ConfigResult,
     ConfigSearch,
     deleteConfigList,
+    getConfigI18n,
     getConfigList,
     getConfigTypeList,
     updateConfig,
+    updateConfigI18n,
     importYml,
     exportYml,
   } from '@/api/config';
@@ -369,18 +405,26 @@
     'java.lang.Short',
     'java.lang.Double',
     'java.util.Map',
-    'json',
   ]);
   const confirmVisible = ref<boolean>(false);
   const importVisible = ref<boolean>(false);
   const jsonEditorRef = ref<InstanceType<typeof JsonConfigEditor>>();
   const editorKey = ref(0);
+  const isMobile = ref(false);
+  const configDescText = ref('');
+  const jsonDescText = ref('');
 
   /** 判断配置项是否为 JSON 参数 */
   const isJsonConfig = (configClazz?: string) =>
     configClazz?.toLowerCase() === 'json';
   const uploadRef = ref();
   const fileList = ref<FileItem[]>([]);
+  const editModalWidth = computed(() =>
+    isJsonConfig(editData.configClazz) ? 1180 : 450
+  );
+  const checkScreen = () => {
+    isMobile.value = window.innerWidth < 768;
+  };
 
   const loadTypes = async () => {
     const { data } = await getConfigTypeList();
@@ -410,6 +454,25 @@
     return t(`config.clz.${clzType}`);
   };
 
+  const getJsonDescSummary = (desc: string) => {
+    const trimmed = (desc || '').trim();
+    if (!trimmed) return '';
+    try {
+      const jsonDescSelfKey = '_self';
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const selfDesc = parsed[jsonDescSelfKey];
+      if (typeof selfDesc === 'string') return selfDesc;
+    } catch {
+      return desc;
+    }
+    return desc;
+  };
+
+  const displayConfigDesc = (record: ConfigResult) =>
+    isJsonConfig(record.configClazz)
+      ? getJsonDescSummary(record.configDesc)
+      : record.configDesc;
+
   const getClzType = (clz: string) => {
     let clzType;
     switch (clz) {
@@ -426,11 +489,50 @@
       case 'java.lang.Boolean':
         clzType = 'bool';
         break;
+      case 'json':
+        clzType = 'json';
+        break;
       default:
         clzType = 'string';
         break;
     }
     return clzType;
+  };
+
+  const resetI18nData = (desc = '') => {
+    configDescText.value = desc;
+    jsonDescText.value = '';
+  };
+
+  const loadConfigI18n = async (record: ConfigResult) => {
+    resetI18nData(record.configDesc);
+    if (!record.configCode) return;
+    const { data } = await getConfigI18n(record.configCode);
+    configDescText.value = data.configDesc || record.configDesc || '';
+    jsonDescText.value = data.jsonDesc || '';
+  };
+
+  const syncCurrentDesc = () => {
+    editData.configDesc = configDescText.value;
+  };
+
+  const buildConfigI18nPayload = (): ConfigI18n => ({
+    configCode: editData.configCode,
+    configDesc: configDescText.value,
+    jsonDesc: isJsonConfig(editData.configClazz)
+      ? jsonDescText.value
+      : undefined,
+  });
+
+  const ensureJsonConfigValue = () => {
+    if (isJsonConfig(editData.configClazz) && !editData.configValue.trim()) {
+      editData.configValue = '{}';
+    }
+  };
+
+  const configClazzChange = () => {
+    ensureJsonConfigValue();
+    editorKey.value += 1;
   };
 
   const loadConfigs = async () => {
@@ -486,6 +588,7 @@
 
   const addClick = () => {
     resetEditData();
+    resetI18nData();
     editorKey.value += 1;
     editVisible.value = true;
     editTitle.value = t('button.add');
@@ -495,7 +598,7 @@
     confirmVisible.value = true;
   };
 
-  const uptClick = (record: ConfigResult) => {
+  const uptClick = async (record: ConfigResult) => {
     editData.id = record.id;
     editData.configType = record.configType;
     editData.configSubType = record.configSubType;
@@ -506,9 +609,11 @@
     editorKey.value += 1;
     editVisible.value = true;
     editTitle.value = t('button.edit');
+    await loadConfigI18n(record);
   };
 
   const editOk = async () => {
+    syncCurrentDesc();
     if (isJsonConfig(editData.configClazz)) {
       const jsonText = jsonEditorRef.value?.getSubmitValue();
       if (!jsonText) {
@@ -516,12 +621,18 @@
       }
       editData.configValue = jsonText;
     }
+    const submitData = {
+      ...editData,
+      configDesc: undefined,
+    } as unknown as ConfigResult;
     if (editData.id) {
-      await updateConfig(editData);
+      await updateConfig(submitData);
     } else {
-      await addConfig(editData);
+      await addConfig(submitData);
     }
+    await updateConfigI18n(buildConfigI18nPayload());
     resetEditData();
+    resetI18nData();
     editVisible.value = false;
     await loadConfigs();
   };
@@ -573,6 +684,15 @@
       setLoading(false);
     }
   };
+
+  onMounted(() => {
+    checkScreen();
+    window.addEventListener('resize', checkScreen);
+  });
+
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', checkScreen);
+  });
 
   loadTypes();
 </script>
@@ -637,6 +757,23 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: middle;
+  }
+
+  .config-desc-cell {
+    display: inline-block;
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .config-i18n-tabs {
+    width: 100%;
+
+    :deep(.arco-tabs-content) {
+      padding-top: 6px;
+    }
   }
 </style>
 

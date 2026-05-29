@@ -69,7 +69,9 @@
           :search-hit="searchResultSet.has(rootNode.id)"
           :search-active="rootNode.id === activeSearchId"
           :search-keyword="searchKeyword"
+          :description-schema="descriptionSchema"
           @change="emit('treeChange')"
+          @description-change="emit('descriptionChange', rootNode, $event)"
           @duplicate="emit('duplicateNode', $event)"
           @remove="emit('removeNode', $event)"
         />
@@ -84,11 +86,22 @@
             :search-result-set="searchResultSet"
             :active-search-id="activeSearchId"
             :search-keyword="searchKeyword"
+            :description-schema="descriptionSchema"
             @change="emit('treeChange')"
+            @description-change="
+              emit('descriptionChange', $event.node, $event.description)
+            "
             @duplicate="emit('duplicateNode', $event)"
             @remove="emit('removeNode', $event)"
           />
         </template>
+        <div
+          v-if="editMode && isRootContainer && rootNode.expanded"
+          class="json-tree-add-root-child"
+          @click="emit('addRootChild')"
+        >
+          + {{ $t('config.json.addChild') }}
+        </div>
       </template>
       <a-empty v-else :description="$t('config.json.invalid')" />
     </div>
@@ -99,7 +112,10 @@
   import { computed, ref, watch } from 'vue';
   import JsonTreeNodeRow from './JsonTreeNodeRow.vue';
   import TreeNodeChildren from './TreeNodeChildren.vue';
-  import type { JsonTreeNodeData } from './json-editor-types';
+  import type {
+    JsonDescriptionSchema,
+    JsonTreeNodeData,
+  } from './json-editor-types';
 
   const props = defineProps<{
     rootNode: JsonTreeNodeData | null;
@@ -109,20 +125,23 @@
     searchKeyword: string;
     searchResultIds: string[];
     searchIndex: number;
+    descriptionSchema: JsonDescriptionSchema | null;
   }>();
 
   const emit = defineEmits<{
-    expandAll: [];
-    collapseAll: [];
-    toggleEditMode: [];
-    undo: [];
-    redo: [];
-    search: [keyword: string];
-    prevResult: [];
-    nextResult: [];
-    treeChange: [];
-    duplicateNode: [nodeId: string];
-    removeNode: [nodeId: string];
+    (e: 'expandAll'): void;
+    (e: 'collapseAll'): void;
+    (e: 'toggleEditMode'): void;
+    (e: 'undo'): void;
+    (e: 'redo'): void;
+    (e: 'search', keyword: string): void;
+    (e: 'prevResult'): void;
+    (e: 'nextResult'): void;
+    (e: 'treeChange'): void;
+    (e: 'duplicateNode', nodeId: string): void;
+    (e: 'removeNode', nodeId: string): void;
+    (e: 'addRootChild'): void;
+    (e: 'descriptionChange', node: JsonTreeNodeData, description: string): void;
   }>();
 
   const localKeyword = ref(props.searchKeyword);
@@ -136,6 +155,9 @@
   const searchResultSet = computed(() => new Set(props.searchResultIds));
   const activeSearchId = computed(
     () => props.searchResultIds[props.searchIndex] ?? ''
+  );
+  const isRootContainer = computed(
+    () => props.rootNode?.type === 'object' || props.rootNode?.type === 'array'
   );
 </script>
 
@@ -164,6 +186,10 @@
     overflow-x: auto;
   }
 
+  .json-tree-toolbar :deep(.arco-input-search) {
+    flex: 0 0 200px;
+  }
+
   .json-tree-mode-hint {
     margin-bottom: 6px;
     flex-shrink: 0;
@@ -175,6 +201,18 @@
     white-space: nowrap;
   }
 
+  .json-tree-add-root-child {
+    padding: 2px 0 2px 40px;
+    color: var(--color-text-3);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      color: rgb(var(--primary-6));
+    }
+  }
+
   .json-tree-scroll {
     flex: 1;
     overflow: auto;
@@ -182,5 +220,17 @@
     border-radius: 4px;
     padding: 4px;
     background: var(--color-bg-1);
+  }
+
+  @media (max-width: 768px) {
+    .json-tree-toolbar {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+
+    .json-tree-toolbar :deep(.arco-input-search) {
+      flex: 1 1 180px;
+      min-width: 0;
+    }
   }
 </style>

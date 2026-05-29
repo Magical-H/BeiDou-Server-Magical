@@ -67,6 +67,9 @@ export default {
   'config.json.editMode': '修改模式',
   'config.json.readMode': '只读模式',
   'config.json.path': '路径',
+  'config.json.nodeDesc': 'JSON节点说明',
+  'config.json.nodeDescPlaceholder':
+    '{"_self":"配置说明","enabled":"是否启用"}',
 
   'config.column.type': '参数大类',
   'config.column.subType': '参数分类',

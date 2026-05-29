@@ -26,17 +26,21 @@ import org.gms.provider.wz.WZFiles;
 import org.gms.provider.wz.XMLWZFile;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class DataProviderFactory {
-    private static final String WZ_DIR = "wz";
     // 注解：存储具体的 CachingDataProvider 实例，以便进行类型转换和方法调用
     private static final Map<String, CachingDataProvider> providers = new ConcurrentHashMap<>();
 
     private static CachingDataProvider getWZ(File fileIn) {
-        String key = fileIn.getName().toLowerCase();
+        String key = fileIn.toPath().normalize().toString().toLowerCase(Locale.ROOT);
         return providers.computeIfAbsent(key, k -> {
             DataProvider rawProvider = new XMLWZFile(fileIn.toPath());
             return new CachingDataProvider(rawProvider);
@@ -47,39 +51,51 @@ public class DataProviderFactory {
      * 注解：返回具体的 CachingDataProvider 类型，以便上层代码能调用其特有方法。
      */
     public static CachingDataProvider getDataProvider(WZFiles in) {
-        String wzName = in.name();
-        File wzDir = new File(WZ_DIR);
+        Path targetPath = in.getFile();
+        Path wzDir = targetPath.getParent();
 
-        if (!wzDir.exists() || !wzDir.isDirectory()) {
-            throw new IllegalStateException("WZ目录不存在或不是一个有效的目录，路径: " + wzDir.getAbsolutePath());
+        if (wzDir == null || !Files.isDirectory(wzDir)) {
+            throw new IllegalStateException("WZ目录不存在或不是一个有效的目录，路径: " + targetPath.toAbsolutePath());
         }
 
-        File finalDir = null;
-        String targetNameWithExt = wzName + ".wz";
-        String targetNameWithoutExt = wzName;
-
-        File[] files = wzDir.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    if (file.getName().equalsIgnoreCase(targetNameWithExt)) {
-                        finalDir = file;
-                        break;
-                    }
-                    if (file.getName().equalsIgnoreCase(targetNameWithoutExt)) {
-                        finalDir = file;
-                    }
-                }
-            }
-        }
+        Path finalDir = resolveWzDirectory(wzDir, targetPath.getFileName().toString());
 
         if (finalDir == null) {
             throw new IllegalStateException(
-                    "加载 " + wzName + " 失败：在 " + wzDir.getAbsolutePath() + " 目录下找不到对应的WZ目录。"
+                    "加载 " + targetPath.getFileName() + " 失败：在 " + wzDir.toAbsolutePath() + " 目录下找不到对应的WZ目录。"
             );
         }
 
-        return getWZ(finalDir);
+        return getWZ(finalDir.toFile());
+    }
+
+    private static Path resolveWzDirectory(Path wzDir, String targetNameWithExt) {
+        Path direct = wzDir.resolve(targetNameWithExt);
+        if (Files.isDirectory(direct)) {
+            return direct;
+        }
+
+        Path finalDir = null;
+        String targetNameWithoutExt = targetNameWithExt.endsWith(".wz")
+                ? targetNameWithExt.substring(0, targetNameWithExt.length() - 3)
+                : targetNameWithExt;
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(wzDir)) {
+            for (Path file : files) {
+                if (!Files.isDirectory(file)) {
+                    continue;
+                }
+                String fileName = file.getFileName().toString();
+                if (fileName.equalsIgnoreCase(targetNameWithExt)) {
+                    return file;
+                }
+                if (fileName.equalsIgnoreCase(targetNameWithoutExt)) {
+                    finalDir = file;
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("加载 WZ 目录失败：" + wzDir.toAbsolutePath(), e);
+        }
+        return finalDir;
     }
 
     /**

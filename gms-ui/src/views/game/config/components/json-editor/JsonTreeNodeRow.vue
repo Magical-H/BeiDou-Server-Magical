@@ -1,152 +1,176 @@
 <template>
   <!-- eslint-disable vue/no-v-html -->
-  <div
-    class="json-tree-row"
-    :class="{
-      'json-tree-row--root': root,
-      'json-tree-row--search-hit': searchHit,
-      'json-tree-row--search-active': searchActive,
-    }"
-  >
-    <!-- 拖拽手柄 -->
-    <span v-if="editMode" class="json-tree-drag-handle" title="拖动排序"
-      >⋮⋮</span
+  <div class="json-tree-node-block">
+    <div
+      v-if="editMode || nodeDescription"
+      class="json-tree-description-row"
+      :style="{ paddingLeft: `${node.level * 16 + 28}px` }"
     >
-    <span
-      v-else
-      class="json-tree-drag-handle json-tree-drag-handle--disabled"
-    ></span>
+      <a-input
+        v-if="editMode"
+        v-model="editDescription"
+        class="json-tree-description-edit"
+        size="mini"
+        :placeholder="$t('config.json.nodeDesc')"
+        @blur="commitDescription"
+        @keydown.enter="($event.target as HTMLInputElement).blur()"
+      />
+      <a-tooltip v-else :content="nodeDescription" position="top">
+        <span class="json-tree-description-text">
+          {{ nodeDescription }}
+        </span>
+      </a-tooltip>
+    </div>
+    <div
+      class="json-tree-row"
+      :class="{
+        'json-tree-row--root': root,
+        'json-tree-row--search-hit': searchHit,
+        'json-tree-row--search-active': searchActive,
+      }"
+    >
+      <!-- 拖拽手柄 -->
+      <span v-if="editMode" class="json-tree-drag-handle" title="拖动排序"
+        >⋮⋮</span
+      >
+      <span
+        v-else
+        class="json-tree-drag-handle json-tree-drag-handle--disabled"
+      ></span>
 
-    <!-- 缩进 -->
-    <span v-for="i in node.level" :key="i" class="json-tree-indent"></span>
+      <!-- 缩进 -->
+      <span v-for="i in node.level" :key="i" class="json-tree-indent"></span>
 
-    <!-- 展开/折叠 -->
-    <span v-if="isContainer" class="json-tree-toggle" @click="toggleExpand">
-      <icon-down v-if="node.expanded" />
-      <icon-right v-else />
-    </span>
-    <span v-else class="json-tree-toggle json-tree-toggle--leaf"></span>
+      <!-- 展开/折叠 -->
+      <span v-if="isContainer" class="json-tree-toggle" @click="toggleExpand">
+        <icon-down v-if="node.expanded" />
+        <icon-right v-else />
+      </span>
+      <span v-else class="json-tree-toggle json-tree-toggle--leaf"></span>
 
-    <!-- key / index -->
-    <template v-if="!root">
-      <span v-if="parentIsArray" class="json-tree-index">{{ node.key }}</span>
-      <template v-else>
+      <!-- key / index -->
+      <template v-if="!root">
+        <span v-if="parentIsArray" class="json-tree-index">{{ node.key }}</span>
+        <template v-else>
+          <a-input
+            v-if="editMode && !node.readonlyKey"
+            v-model="editKey"
+            class="json-tree-key-edit"
+            size="mini"
+            @blur="commitKey"
+            @keydown.enter="($event.target as HTMLInputElement).blur()"
+          />
+          <span
+            v-else
+            class="json-tree-key"
+            v-html="highlightText(node.key)"
+          ></span>
+        </template>
+        <span class="json-tree-colon">:</span>
+      </template>
+
+      <!-- 值 / 摘要 -->
+      <!-- 容器：显示摘要 -->
+      <span v-if="isContainer" class="json-tree-summary">
+        <template v-if="node.type === 'object'">
+          object {{ '{' }}{{ node.children.length }}{{ '}' }}
+        </template>
+        <template v-else>
+          {{ node.key }} [{{ node.children.length }}]
+        </template>
+      </span>
+      <!-- string -->
+      <template v-else-if="node.type === 'string'">
         <a-input
-          v-if="editMode && !node.readonlyKey"
-          v-model="editKey"
-          class="json-tree-key-edit"
+          v-if="editMode"
+          v-model="editValue"
+          class="json-tree-value-edit"
           size="mini"
-          @blur="commitKey"
+          @blur="commitValue"
           @keydown.enter="($event.target as HTMLInputElement).blur()"
         />
         <span
           v-else
-          class="json-tree-key"
-          v-html="highlightText(node.key)"
+          class="json-tree-value json-tree-value--string"
+          v-html="`&quot;${highlightText(String(node.value))}&quot;`"
         ></span>
       </template>
-      <span class="json-tree-colon">:</span>
-    </template>
-
-    <!-- 值 / 摘要 -->
-    <!-- 容器：显示摘要 -->
-    <span v-if="isContainer" class="json-tree-summary">
-      <template v-if="node.type === 'object'">
-        object {{ '{' }}{{ node.children.length }}{{ '}' }}
+      <!-- number -->
+      <template v-else-if="node.type === 'number'">
+        <a-input
+          v-if="editMode"
+          v-model="editValue"
+          class="json-tree-value-edit"
+          size="mini"
+          @blur="commitNumber"
+          @keydown.enter="($event.target as HTMLInputElement).blur()"
+        />
+        <span v-else class="json-tree-value json-tree-value--number">{{
+          node.value
+        }}</span>
       </template>
-      <template v-else> {{ node.key }} [{{ node.children.length }}] </template>
-    </span>
-    <!-- string -->
-    <template v-else-if="node.type === 'string'">
-      <a-input
-        v-if="editMode"
-        v-model="editValue"
-        class="json-tree-value-edit"
-        size="mini"
-        @blur="commitValue"
-        @keydown.enter="($event.target as HTMLInputElement).blur()"
-      />
-      <span
-        v-else
-        class="json-tree-value json-tree-value--string"
-        v-html="`&quot;${highlightText(String(node.value))}&quot;`"
-      ></span>
-    </template>
-    <!-- number -->
-    <template v-else-if="node.type === 'number'">
-      <a-input
-        v-if="editMode"
-        v-model="editValue"
-        class="json-tree-value-edit"
-        size="mini"
-        @blur="commitNumber"
-        @keydown.enter="($event.target as HTMLInputElement).blur()"
-      />
-      <span v-else class="json-tree-value json-tree-value--number">{{
-        node.value
-      }}</span>
-    </template>
-    <!-- boolean -->
-    <template v-else-if="node.type === 'boolean'">
-      <a-switch
-        v-if="editMode"
-        :model-value="node.value === true"
-        size="mini"
-        @change="commitBoolean"
-      />
-      <span v-else class="json-tree-value json-tree-value--boolean">{{
-        node.value
-      }}</span>
-    </template>
-    <!-- null -->
-    <span v-else class="json-tree-value json-tree-value--null">null</span>
+      <!-- boolean -->
+      <template v-else-if="node.type === 'boolean'">
+        <a-switch
+          v-if="editMode"
+          :model-value="node.value === true"
+          size="small"
+          @change="commitBoolean"
+        />
+        <span v-else class="json-tree-value json-tree-value--boolean">{{
+          node.value
+        }}</span>
+      </template>
+      <!-- null -->
+      <span v-else class="json-tree-value json-tree-value--null">null</span>
 
-    <!-- 右侧操作按钮 -->
-    <span v-if="editMode" class="json-tree-actions">
-      <a-dropdown v-if="!root" trigger="click">
-        <a-button size="mini" type="text" title="类型">
-          {{ typeLabel }}
+      <!-- 右侧操作按钮 -->
+      <span v-if="editMode" class="json-tree-actions">
+        <a-dropdown v-if="!root" trigger="click">
+          <a-button size="mini" type="text" title="类型">
+            {{ typeLabel }}
+          </a-button>
+          <template #content>
+            <a-doption value="string" @click="changeType('string')"
+              >A 字符串</a-doption
+            >
+            <a-doption value="number" @click="changeType('number')"
+              >123 数字</a-doption
+            >
+            <a-doption value="boolean" @click="changeType('boolean')"
+              >T/F 布尔</a-doption
+            >
+            <a-doption value="null" @click="changeType('null')"
+              >null 空值</a-doption
+            >
+            <a-doption value="object" @click="changeType('object')">{{
+              '{} 对象'
+            }}</a-doption>
+            <a-doption value="array" @click="changeType('array')"
+              >[] 数组</a-doption
+            >
+          </template>
+        </a-dropdown>
+        <a-button
+          v-if="!root"
+          size="mini"
+          type="text"
+          title="复制"
+          @click="$emit('duplicate', node.id)"
+        >
+          <icon-copy />
         </a-button>
-        <template #content>
-          <a-doption value="string" @click="changeType('string')"
-            >A 字符串</a-doption
-          >
-          <a-doption value="number" @click="changeType('number')"
-            >123 数字</a-doption
-          >
-          <a-doption value="boolean" @click="changeType('boolean')"
-            >T/F 布尔</a-doption
-          >
-          <a-doption value="null" @click="changeType('null')"
-            >null 空值</a-doption
-          >
-          <a-doption value="object" @click="changeType('object')">{{
-            '{} 对象'
-          }}</a-doption>
-          <a-doption value="array" @click="changeType('array')"
-            >[] 数组</a-doption
-          >
-        </template>
-      </a-dropdown>
-      <a-button
-        v-if="!root"
-        size="mini"
-        type="text"
-        title="复制"
-        @click="$emit('duplicate', node.id)"
-      >
-        <icon-copy />
-      </a-button>
-      <a-button
-        v-if="!root"
-        size="mini"
-        type="text"
-        title="删除"
-        @click="$emit('remove', node.id)"
-      >
-        <icon-delete />
-      </a-button>
-    </span>
+        <a-button
+          v-if="!root"
+          size="mini"
+          type="text"
+          title="删除"
+          @click="$emit('remove', node.id)"
+        >
+          <icon-delete />
+        </a-button>
+      </span>
+    </div>
   </div>
 </template>
 
@@ -159,8 +183,15 @@
     IconCopy,
     IconDelete,
   } from '@arco-design/web-vue/es/icon';
-  import type { JsonNodeType, JsonTreeNodeData } from './json-editor-types';
-  import { createDefaultValueByType } from './json-editor-utils';
+  import type {
+    JsonDescriptionSchema,
+    JsonNodeType,
+    JsonTreeNodeData,
+  } from './json-editor-types';
+  import {
+    createDefaultValueByType,
+    resolveNodeDescription,
+  } from './json-editor-utils';
 
   const props = defineProps<{
     node: JsonTreeNodeData;
@@ -170,12 +201,14 @@
     searchHit?: boolean;
     searchActive?: boolean;
     searchKeyword?: string;
+    descriptionSchema: JsonDescriptionSchema | null;
   }>();
 
   const emit = defineEmits<{
-    change: [];
-    duplicate: [nodeId: string];
-    remove: [nodeId: string];
+    (e: 'change'): void;
+    (e: 'descriptionChange', description: string): void;
+    (e: 'duplicate', nodeId: string): void;
+    (e: 'remove', nodeId: string): void;
   }>();
 
   const highlightText = (text: string): string => {
@@ -208,6 +241,11 @@
     }
   });
 
+  const nodeDescription = computed(() =>
+    resolveNodeDescription(props.descriptionSchema, props.node)
+  );
+
+  const editDescription = ref(nodeDescription.value);
   const editKey = ref(props.node.key);
   const editValue = ref(
     props.node.type === 'string' || props.node.type === 'number'
@@ -215,6 +253,14 @@
       : ''
   );
 
+  watch(nodeDescription, (v) => {
+    editDescription.value = v;
+  });
+  watch(editDescription, (v) => {
+    if (props.editMode && v !== nodeDescription.value) {
+      emit('descriptionChange', v);
+    }
+  });
   watch(
     () => props.node.key,
     (v) => {
@@ -266,6 +312,11 @@
     emit('change');
   };
 
+  const commitDescription = () => {
+    if (editDescription.value === nodeDescription.value) return;
+    emit('descriptionChange', editDescription.value);
+  };
+
   const changeType = (newType: JsonNodeType) => {
     if (newType === props.node.type) return;
     props.node.type = newType;
@@ -295,6 +346,24 @@
     &:hover {
       background: var(--color-fill-2);
     }
+  }
+
+  .json-tree-description-row {
+    display: flex;
+    align-items: center;
+    min-height: 22px;
+    padding-top: 2px;
+    padding-bottom: 1px;
+  }
+
+  .json-tree-description-text {
+    display: inline-block;
+    max-width: 360px;
+    color: var(--color-text-3);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .json-tree-drag-handle {
@@ -390,6 +459,22 @@
     gap: 0;
     margin-left: auto;
     flex-shrink: 0;
+  }
+
+  @media (max-width: 768px) {
+    .json-tree-row {
+      align-items: flex-start;
+      min-width: max-content;
+    }
+
+    .json-tree-description-text {
+      max-width: 220px;
+    }
+
+    .json-tree-description-edit {
+      width: 220px;
+      max-width: 80vw;
+    }
   }
 
   /* 搜索高亮 — 仅高亮匹配文本，支持明暗主题 */

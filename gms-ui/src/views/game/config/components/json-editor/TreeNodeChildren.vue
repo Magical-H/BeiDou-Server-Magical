@@ -8,7 +8,11 @@
       :search-hit="searchResultSet.has(node.id)"
       :search-active="node.id === activeSearchId"
       :search-keyword="searchKeyword"
+      :description-schema="descriptionSchema"
       @change="emit('change')"
+      @description-change="
+        emit('descriptionChange', { node, description: $event })
+      "
       @duplicate="emit('duplicate', $event)"
       @remove="emit('remove', $event)"
     />
@@ -33,7 +37,9 @@
               :search-result-set="searchResultSet"
               :active-search-id="activeSearchId"
               :search-keyword="searchKeyword"
+              :description-schema="descriptionSchema"
               @change="emit('change')"
+              @description-change="emit('descriptionChange', $event)"
               @duplicate="emit('duplicate', $event)"
               @remove="emit('remove', $event)"
             />
@@ -53,7 +59,11 @@
   import { computed } from 'vue';
   import draggable from 'vuedraggable';
   import JsonTreeNodeRow from './JsonTreeNodeRow.vue';
-  import type { JsonNodeType, JsonTreeNodeData } from './json-editor-types';
+  import type {
+    JsonDescriptionSchema,
+    JsonNodeType,
+    JsonTreeNodeData,
+  } from './json-editor-types';
   import {
     buildTree,
     createDefaultValueByType,
@@ -70,12 +80,17 @@
     searchResultSet: Set<string>;
     activeSearchId: string;
     searchKeyword: string;
+    descriptionSchema: JsonDescriptionSchema | null;
   }>();
 
   const emit = defineEmits<{
-    change: [];
-    duplicate: [nodeId: string];
-    remove: [nodeId: string];
+    (e: 'change'): void;
+    (e: 'duplicate', nodeId: string): void;
+    (e: 'remove', nodeId: string): void;
+    (
+      e: 'descriptionChange',
+      payload: { node: JsonTreeNodeData; description: string }
+    ): void;
   }>();
 
   const isContainer = computed(

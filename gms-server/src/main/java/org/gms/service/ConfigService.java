@@ -14,8 +14,11 @@ import org.gms.config.GameConfig;
 import org.gms.property.ServiceProperty;
 import org.gms.dao.entity.GameConfigDO;
 import org.gms.dao.entity.LangResourcesDO;
+import org.gms.dao.entity.table.LangResourcesDOTableDef;
 import org.gms.dao.mapper.GameConfigMapper;
+import org.gms.dao.mapper.LangResourcesMapper;
 import org.gms.exception.BizException;
+import org.gms.model.dto.ConfigI18nDTO;
 import org.gms.model.dto.ConfigTypeDTO;
 import org.gms.model.dto.GameConfigReqDTO;
 import org.gms.net.server.Server;
@@ -48,7 +51,12 @@ import static org.gms.dao.entity.table.LangResourcesDOTableDef.LANG_RESOURCES_DO
 @AllArgsConstructor
 @Slf4j
 public class ConfigService {
+    private static final String GAME_CONFIG_I18N_BASE = "game_config";
+    private static final String GAME_CONFIG_JSON_I18N_BASE = "game_config_json_i18n";
+    private static final List<String> CONFIG_I18N_BASES = List.of(GAME_CONFIG_I18N_BASE, GAME_CONFIG_JSON_I18N_BASE);
+
     private final GameConfigMapper gameConfigMapper;
+    private final LangResourcesMapper langResourcesMapper;
     private final ServiceProperty serviceProperty;
     private final LangResourceService langResourceService;
     private final ObjectMapper objectMapper;
@@ -67,6 +75,7 @@ public class ConfigService {
     }
 
     public Page<GameConfigDO> getConfigList(GameConfigReqDTO condition) {
+        LangResourcesDOTableDef jsonI18n = LANG_RESOURCES_DO.as("json_i18n");
         // join i18n表
         QueryWrapper queryWrapper = QueryWrapper.create()
                 .select(GAME_CONFIG_DO.ID, GAME_CONFIG_DO.CONFIG_CODE, GAME_CONFIG_DO.CONFIG_CLAZZ,
@@ -75,16 +84,106 @@ public class ConfigService {
                 .from(GAME_CONFIG_DO)
                 .leftJoin(LANG_RESOURCES_DO).on(LANG_RESOURCES_DO.LANG_CODE.eq(GAME_CONFIG_DO.CONFIG_DESC)
                         .and(LANG_RESOURCES_DO.LANG_TYPE.eq(serviceProperty.getLanguage()))
-                        .and(LANG_RESOURCES_DO.LANG_BASE.eq("game_config")));
+                        .and(LANG_RESOURCES_DO.LANG_BASE.eq(GAME_CONFIG_I18N_BASE)))
+                .leftJoin(jsonI18n).on(jsonI18n.LANG_CODE.eq(GAME_CONFIG_DO.CONFIG_CODE)
+                        .and(jsonI18n.LANG_TYPE.eq(serviceProperty.getLanguage()))
+                        .and(jsonI18n.LANG_BASE.eq(GAME_CONFIG_JSON_I18N_BASE)));
         if (!RequireUtil.isEmpty(condition.getType()))
             queryWrapper.and(GAME_CONFIG_DO.CONFIG_TYPE.eq(condition.getType()));
         if (!RequireUtil.isEmpty(condition.getSubType()))
             queryWrapper.and(GAME_CONFIG_DO.CONFIG_SUB_TYPE.eq(condition.getSubType()));
         if (!RequireUtil.isEmpty(condition.getFilter())) {
-            queryWrapper.and(GAME_CONFIG_DO.CONFIG_CODE.like(condition.getFilter()).or(LANG_RESOURCES_DO.LANG_VALUE.like(condition.getFilter())));
+            queryWrapper.and(GAME_CONFIG_DO.CONFIG_CODE.like(condition.getFilter())
+                    .or(LANG_RESOURCES_DO.LANG_VALUE.like(condition.getFilter()))
+                    .or(jsonI18n.LANG_VALUE.like(condition.getFilter())));
         }
 
-        return gameConfigMapper.paginate(condition.getPageNo(), condition.getPageSize(), queryWrapper);
+        Page<GameConfigDO> page = gameConfigMapper.paginate(condition.getPageNo(), condition.getPageSize(), queryWrapper);
+        fillJsonConfigDescriptions(page.getRecords());
+        return page;
+    }
+
+    private void fillJsonConfigDescriptions(List<GameConfigDO> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        for (GameConfigDO record : records) {
+            if (!"json".equalsIgnoreCase(record.getConfigClazz())) {
+                continue;
+            }
+            listConfigI18n(record.getConfigCode(), List.of(GAME_CONFIG_JSON_I18N_BASE))
+                    .stream()
+                    .filter(langResource -> serviceProperty.getLanguage().equals(langResource.getLangType()))
+                    .map(LangResourcesDO::getLangValue)
+                    .filter(langValue -> langValue != null && !langValue.isBlank())
+                    .findFirst()
+                    .ifPresent(record::setConfigDesc);
+        }
+    }
+
+    public ConfigI18nDTO getConfigI18n(String configCode) {
+        RequireUtil.requireNotEmpty(configCode, I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configCode"));
+        String langType = serviceProperty.getLanguage();
+        ConfigI18nDTO result = ConfigI18nDTO.builder()
+                .configCode(configCode)
+                .langType(langType)
+                .configDesc("")
+                .jsonDesc("")
+                .build();
+        listConfigI18n(configCode, CONFIG_I18N_BASES).forEach(langResource -> {
+            if (!langType.equals(langResource.getLangType())) {
+                return;
+            }
+            if (GAME_CONFIG_JSON_I18N_BASE.equals(langResource.getLangBase())) {
+                result.setJsonDesc(langResource.getLangValue());
+            }
+            if (GAME_CONFIG_I18N_BASE.equals(langResource.getLangBase())) {
+                result.setConfigDesc(langResource.getLangValue());
+            }
+        });
+        return result;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void updateConfigI18n(ConfigI18nDTO condition) {
+        RequireUtil.requireNotEmpty(condition.getConfigCode(), I18nUtil.getExceptionMessage("PARAMETER_SHOULD_NOT_EMPTY", "configCode"));
+        String langType = serviceProperty.getLanguage();
+        upsertConfigI18n(GAME_CONFIG_I18N_BASE, condition.getConfigCode(), langType, condition.getConfigDesc());
+        upsertConfigI18n(GAME_CONFIG_JSON_I18N_BASE, condition.getConfigCode(), langType, condition.getJsonDesc());
+    }
+
+    private void upsertConfigI18n(String langBase, String langCode, String langType, String langValue) {
+        if (langValue == null) {
+            return;
+        }
+        LangResourcesDO langResourcesDO = LangResourcesDO.builder()
+                .langBase(langBase)
+                .langCode(langCode)
+                .langType(langType)
+                .langValue(langValue)
+                .build();
+        List<LangResourcesDO> exists = listConfigI18n(langCode, List.of(langBase))
+                .stream()
+                .filter(langResource -> langType.equals(langResource.getLangType()))
+                .toList();
+        if (exists.size() == 1) {
+            langResourcesDO.setId(exists.getFirst().getId());
+            langResourcesMapper.update(langResourcesDO);
+            return;
+        }
+        if (exists.size() > 1) {
+            langResourcesMapper.deleteBatchByIds(exists.stream().map(LangResourcesDO::getId).collect(Collectors.toList()));
+        }
+        langResourcesMapper.insert(langResourcesDO);
+    }
+
+    private List<LangResourcesDO> listConfigI18n(String langCode, Collection<String> langBases) {
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .where(LANG_RESOURCES_DO.LANG_CODE.eq(langCode));
+        if (langBases != null && !langBases.isEmpty()) {
+            queryWrapper.and(LANG_RESOURCES_DO.LANG_BASE.in(langBases));
+        }
+        return langResourcesMapper.selectListByQuery(queryWrapper);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -104,12 +203,14 @@ public class ConfigService {
         }
         List<GameConfigDO> gameConfigDOList = gameConfigMapper.selectListByQuery(queryWrapper);
         RequireUtil.requireTrue(gameConfigDOList.isEmpty(), I18nUtil.getExceptionMessage("ConfigService.addConfig.exception1"));
-        langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
-                .langBase("game_config")
-                .langCode(condition.getConfigCode())
-                .langType(serviceProperty.getLanguage())
-                .langValue(condition.getConfigDesc())
-                .build());
+        if (condition.getConfigDesc() != null) {
+            langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
+                    .langBase("game_config")
+                    .langCode(condition.getConfigCode())
+                    .langType(serviceProperty.getLanguage())
+                    .langValue(condition.getConfigDesc())
+                    .build());
+        }
         condition.setId(null);
         condition.setConfigDesc(condition.getConfigCode());
         condition.setUpdateTime(new Date(System.currentTimeMillis()));
@@ -179,12 +280,14 @@ public class ConfigService {
         if ("json".equalsIgnoreCase(gameConfigDO.getConfigClazz())) {
             validateJsonConfigValue(condition.getConfigValue());
         }
-        langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
-                .langBase("game_config")
-                .langCode(gameConfigDO.getConfigCode())
-                .langType(serviceProperty.getLanguage())
-                .langValue(condition.getConfigDesc())
-                .build());
+        if (condition.getConfigDesc() != null) {
+            langResourceService.insertOrUpdateI18n(LangResourcesDO.builder()
+                    .langBase("game_config")
+                    .langCode(gameConfigDO.getConfigCode())
+                    .langType(serviceProperty.getLanguage())
+                    .langValue(condition.getConfigDesc())
+                    .build());
+        }
         gameConfigMapper.update(GameConfigDO.builder()
                 .id(condition.getId())
                 .configValue(condition.getConfigValue())

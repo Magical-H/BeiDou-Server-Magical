@@ -66,6 +66,7 @@ import org.gms.server.events.gm.OxQuiz;
 import org.gms.server.events.gm.Snowball;
 import org.gms.server.life.LifeFactory;
 import org.gms.server.life.LifeFactory.selfDestruction;
+import org.gms.server.life.BossKillNoticeConfig;
 import org.gms.server.life.Monster;
 import org.gms.server.life.MonsterDropEntry;
 import org.gms.server.life.MonsterGlobalDropEntry;
@@ -1569,6 +1570,7 @@ public class MapleMap {
                         }
                     }
 
+                    boolean waitingBossRevive = monster.isBoss() && monster.willReviveBoss();
                     Character dropOwner = monster.killBy(chr);
                     if (withDrops && !monster.isDropsDisabled()) {
                         if (dropOwner == null) {
@@ -1585,20 +1587,8 @@ public class MapleMap {
                         }
                     }
 
-                    // 【新增】Loki日志记录
-                    if (monster.isBoss()) {
-                        // 获取当时在场的所有玩家名称
-                        // 构建地图所有角色的JSON结构 [id, name]
-                        List<Object[]> playerInfoList = monster.getMap().getAllPlayers().stream()
-                                .map(p -> new Object[]{p.getId(), p.getName()})
-                                .collect(Collectors.toList());
-
-                        MapMessage data = new MapMessage()
-                            .with("怪物ID", monster.getId())
-                            .with("怪物名称", monster.getName())
-                            .with("地图角色", playerInfoList);
-
-                        AuditLogger.info(LogModule.FIELD, LogAction.FIELD_BOSS_KILLED, data);
+                    if (monster.isBoss() && !waitingBossRevive) {
+                        handleBossKilledRecord(monster);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -1608,6 +1598,111 @@ public class MapleMap {
                 }
             }
         }
+    }
+
+    private void handleBossKilledRecord(Monster monster) {
+        Monster.BossDamageSummary summary = monster.getBossDamageSummary(System.currentTimeMillis());
+        writeBossKilledLog(monster, summary);
+        broadcastWildBossKilledNotice(monster, summary);
+    }
+
+    private void writeBossKilledLog(Monster monster, Monster.BossDamageSummary summary) {
+        List<Map<String, Object>> participants = summary.getParticipants().stream()
+                .map(this::toBossParticipantLog)
+                .collect(Collectors.toList());
+        Set<Integer> participantIds = summary.getParticipants().stream()
+                .map(Monster.BossDamageSnapshot::getPlayerId)
+                .collect(Collectors.toSet());
+        List<Map<String, Object>> nonParticipants = getAllPlayers().stream()
+                .filter(player -> !participantIds.contains(player.getId()))
+                .map(this::toBossMapPlayerLog)
+                .collect(Collectors.toList());
+
+        MapMessage data = new MapMessage()
+                .with("bossId", monster.getId())
+                .with("bossName", monster.getName())
+                .with("encounterMobId", summary.getEncounterMobId())
+                .with("world", world)
+                .with("channel", channel)
+                .with("mapId", mapid)
+                .with("mapName", getMapName())
+                .with("durationMillis", summary.getDurationMillis())
+                .with("totalDamage", summary.getTotalDamage())
+                .with("averageDps", summary.getAverageDps())
+                .with("participants", participants)
+                .with("nonParticipants", nonParticipants);
+
+        AuditLogger.info(LogModule.FIELD, LogAction.FIELD_BOSS_KILLED, data);
+    }
+
+    private Map<String, Object> toBossParticipantLog(Monster.BossDamageSnapshot snapshot) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("playerId", snapshot.getPlayerId());
+        data.put("playerName", snapshot.getPlayerName());
+        data.put("totalDamage", snapshot.getTotalDamage());
+        data.put("hitCount", snapshot.getHitCount());
+        data.put("directHitCount", snapshot.getDirectHitCount());
+        data.put("summonHitCount", snapshot.getSummonHitCount());
+        data.put("maxSingleDamage", snapshot.getMaxSingleDamage());
+        data.put("lastSkillId", snapshot.getLastSkillId());
+        data.put("lastSkillTargetCount", snapshot.getLastSkillTargetCount());
+        data.put("firstDamageTime", snapshot.getFirstDamageTime());
+        data.put("lastDamageTime", snapshot.getLastDamageTime());
+        data.put("encounterAvgDps", snapshot.getEncounterAvgDps());
+        data.put("activeAvgDps", snapshot.getActiveAvgDps());
+        return data;
+    }
+
+    private Map<String, Object> toBossMapPlayerLog(Character player) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("playerId", player.getId());
+        data.put("playerName", player.getName());
+        return data;
+    }
+
+    private void broadcastWildBossKilledNotice(Monster monster, Monster.BossDamageSummary summary) {
+        BossKillNoticeConfig config = BossKillNoticeConfig.load();
+        int encounterMobId = summary.getEncounterMobId();
+        if (!config.shouldBroadcast(encounterMobId) || !isWildBossMap(encounterMobId)) {
+            return;
+        }
+
+        String participantNames = summary.getParticipants().stream()
+                .map(Monster.BossDamageSnapshot::getPlayerName)
+                .distinct()
+                .collect(Collectors.joining("、"));
+        if (participantNames.isBlank()) {
+            participantNames = "无记录";
+        }
+
+        String message = String.format(
+                "【击杀通告】[频道 %d] %s 的BOSS %s 已被 %s 击杀。耗时 %.4f 秒，总伤害 %d ，DPS：%d",
+                channel,
+                getMapName(),
+                monster.getName(),
+                participantNames,
+                summary.getDurationMillis() / 1000D,
+                summary.getTotalDamage(),
+                Math.round(summary.getAverageDps()));
+
+        Packet packet = PacketCreator.serverNotice(6, message);
+        getWorldServer().broadcastPacket(packet);
+    }
+
+    private boolean isWildBossMap(int bossId) {
+        return getEventInstance() == null
+                && !hasClock()
+                && timeLimit <= 0
+                && hasBossSpawn(bossId);
+    }
+
+    public boolean hasBossSpawn(int bossId) {
+        for (SpawnPoint spawnPoint : getMonsterSpawnBoss()) {
+            if (spawnPoint.getMonsterId() == bossId) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void killFriendlies(Monster mob) {

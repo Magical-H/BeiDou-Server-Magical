@@ -87,6 +87,8 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 @Setter @Getter
 public class Monster extends AbstractLoadedLife {
+    private static final long MIN_BOSS_DPS_DURATION_MILLIS = 1000L;
+    private static final long BOSS_DAMAGE_TIMEOUT_CHECK_INTERVAL_MILLIS = 1000L;
 
     /*
     ======================================
@@ -135,6 +137,12 @@ public class Monster extends AbstractLoadedLife {
     private boolean controllerHasPuppet;
     /** 伤害记录-记录所有玩家对该怪物的伤害量 */
     private final HashMap<Integer, AtomicLong> takenDamage = new HashMap<>();
+    private final HashMap<Integer, BossDamageRecord> bossDamageRecords = new HashMap<>();
+    private long bossDamageEncounterStartTime = 0L;
+    private long bossDamageLastTime = 0L;
+    private int bossDamageEncounterMobId = 0;
+    private long bossDamageTimeoutToken = 0L;
+    private ScheduledFuture<?> bossDamageTimeoutTask = null;
     /** 最近伤害时间-记录每个玩家的最后伤害时间戳 */
     private final HashMap<Integer, Long> takenDamageTime = new HashMap<>();
     /** 召唤兽伤害标记-区分伤害来源是玩家还是召唤兽 */
@@ -578,15 +586,187 @@ public class Monster extends AbstractLoadedLife {
             summonDamageFlag.put(from.getId(), true);//伤害来源：召唤兽
         }
 
+        recordBossDamage(from, damage, trueDamage, isFromSummon);
         broadcastMobHpBar(from);
     }
 
     public void applyFakeDamage(Character from, int damage, boolean stayAlive) {
-        applyDamage(from, damage, stayAlive, true, false);
+        lockMonster();
+        try {
+            applyDamage(from, damage, stayAlive, true, false);
+        } finally {
+            unlockMonster();
+        }
     }
     
     public void applySummonDamage(Character from, int damage, boolean stayAlive) {
-        applyDamage(from, damage, stayAlive, false, true);
+        lockMonster();
+        try {
+            applyDamage(from, damage, stayAlive, false, true);
+        } finally {
+            unlockMonster();
+        }
+    }
+
+    private void recordBossDamage(Character from, int actualDamage, int hpDamage, boolean isFromSummon) {
+        if (!isBoss() || actualDamage <= 0 || hpDamage <= 0) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (bossDamageEncounterStartTime <= 0) {
+            bossDamageEncounterStartTime = now;
+            bossDamageEncounterMobId = getId();
+        }
+        bossDamageLastTime = now;
+
+        BossDamageRecord record = bossDamageRecords.computeIfAbsent(from.getId(), id -> new BossDamageRecord(from));
+        record.addDamage(from, actualDamage, isFromSummon, now, lastSkillId.get(), lastSkillTargetCount.get());
+        ensureBossDamageTimeoutTask();
+    }
+
+    private void ensureBossDamageTimeoutTask() {
+        if (bossDamageTimeoutTask != null) {
+            return;
+        }
+
+        long token = ++bossDamageTimeoutToken;
+        bossDamageTimeoutTask = TimerManager.getInstance().register(
+                () -> resetBossDamageIfExpired(token),
+                BOSS_DAMAGE_TIMEOUT_CHECK_INTERVAL_MILLIS,
+                BOSS_DAMAGE_TIMEOUT_CHECK_INTERVAL_MILLIS);
+    }
+
+    private long getBossDamageTimeoutMillis() {
+        return BossKillNoticeConfig.load().getDamageTimeoutSeconds() * 1000L;
+    }
+
+    private void resetBossDamageIfExpired(long token) {
+        lockMonster();
+        try {
+            if (token != bossDamageTimeoutToken || bossDamageTimeoutTask == null) {
+                return;
+            }
+
+            if (!isAlive() || bossDamageLastTime <= 0 || bossDamageRecords.isEmpty()) {
+                cancelBossDamageTimeout();
+                return;
+            }
+
+            long timeoutMillis = getBossDamageTimeoutMillis();
+            long elapsedMillis = System.currentTimeMillis() - bossDamageLastTime;
+            if (elapsedMillis < timeoutMillis) {
+                return;
+            }
+
+            notifyBossDamageTimeoutDebug(getMap(), timeoutMillis);
+            clearBossDamageTracking(true);
+        } finally {
+            unlockMonster();
+        }
+    }
+
+    private void clearBossDamageTracking(boolean restoreHp) {
+        cancelBossDamageTimeout();
+        bossDamageRecords.clear();
+        bossDamageEncounterStartTime = 0L;
+        bossDamageLastTime = 0L;
+        bossDamageEncounterMobId = 0;
+        takenDamage.clear();
+        takenDamageTime.clear();
+        summonDamageFlag.clear();
+        maxHpPlusHeal.set(getMaxHp());
+
+        MapleMap currentMap = getMap();
+        resetBossCombatState(currentMap);
+
+        if (restoreHp && isAlive()) {
+            int beforeHp = hp.get();
+            int maxHp = getMaxHp();
+            int maxMp = getMaxMp();
+            hp.set(maxHp);
+            setMp(maxMp);
+
+            if (currentMap != null) {
+                if (beforeHp < maxHp) {
+                    currentMap.broadcastMessage(PacketCreator.healMonster(getObjectId(), maxHp - beforeHp, maxHp, maxHp));
+                }
+            }
+        }
+    }
+
+    private void notifyBossDamageTimeoutDebug(MapleMap currentMap, long timeoutMillis) {
+        if (currentMap == null || !GameConfig.getServerBoolean("use_debug") || bossDamageRecords.isEmpty()) {
+            return;
+        }
+
+        long totalDamage = bossDamageRecords.values().stream().mapToLong(record -> record.totalDamage).sum();
+        String message = String.format(
+                "[野外BOSS调试] %s(%d) %d秒未受到伤害，已清空参与记录并恢复HP/MP、状态和仇恨。参与人数=%d，总伤害=%d",
+                getName(), getId(), timeoutMillis / 1000L, bossDamageRecords.size(), totalDamage);
+
+        for (BossDamageRecord record : bossDamageRecords.values()) {
+            Character chr = currentMap.getCharacterById(record.playerId);
+            if (chr != null && chr.isGM()) {
+                chr.dropMessage(5, message);
+            }
+        }
+    }
+
+    private void resetBossCombatState(MapleMap currentMap) {
+        clearMonsterStatuses(currentMap);
+        aggroClearDamages();
+        aggroRemoveController();
+
+        if (currentMap != null && hasBossHPBar()) {
+            for (Character chr : currentMap.getAllPlayers()) {
+                if (chr.getTargetHpBarHash() == hashCode()) {
+                    chr.resetPlayerAggro();
+                }
+            }
+        }
+    }
+
+    private void clearMonsterStatuses(MapleMap currentMap) {
+        List<MonsterStatusEffect> activeEffects;
+        statiLock.lock();
+        try {
+            activeEffects = new ArrayList<>(new HashSet<>(stati.values()));
+        } finally {
+            statiLock.unlock();
+        }
+
+        if (currentMap != null) {
+            MobStatusService service = (MobStatusService) currentMap.getChannelServer().getServiceAccess(ChannelServices.MOB_STATUS);
+            for (MonsterStatusEffect effect : activeEffects) {
+                service.interruptMobStatus(currentMap.getId(), effect);
+            }
+        }
+
+        Map<MonsterStatus, Integer> remainingStatuses = new EnumMap<>(MonsterStatus.class);
+        statiLock.lock();
+        try {
+            for (Entry<MonsterStatus, MonsterStatusEffect> entry : stati.entrySet()) {
+                Integer value = entry.getValue().getStati().get(entry.getKey());
+                remainingStatuses.put(entry.getKey(), value != null ? value : 0);
+            }
+            stati.clear();
+            alreadyBuffed.clear();
+        } finally {
+            statiLock.unlock();
+        }
+
+        if (currentMap != null && !remainingStatuses.isEmpty()) {
+            broadcastMonsterStatusMessage(PacketCreator.cancelMonsterStatus(getObjectId(), remainingStatuses));
+        }
+    }
+
+    private void cancelBossDamageTimeout() {
+        if (bossDamageTimeoutTask != null) {
+            bossDamageTimeoutTask.cancel(false);
+            bossDamageTimeoutTask = null;
+        }
+        bossDamageTimeoutToken++;
     }
 
     public void heal(int hp, int mp) {
@@ -1032,6 +1212,7 @@ public class Monster extends AbstractLoadedLife {
 
             if (!toSpawn.isEmpty()) {
                 final EventInstanceManager eim = this.getMap().getEventInstance();
+                final BossDamageSummary bossDamageSummary = isBoss() ? getBossDamageSummary(System.currentTimeMillis()) : null;
 
                 TimerManager.getInstance().schedule(() -> {
                     Character controller = lastController.getLeft();
@@ -1047,6 +1228,9 @@ public class Monster extends AbstractLoadedLife {
 
                         if (isDropsDisabled()) {
                             mob.disableDrops();
+                        }
+                        if (bossDamageSummary != null && mob.isBoss()) {
+                            mob.inheritBossDamageSummary(bossDamageSummary);
                         }
                         reviveMap.spawnMonster(mob);
 
@@ -1153,6 +1337,11 @@ public class Monster extends AbstractLoadedLife {
 
         this.aggroClearDamages();
         this.dispatchClearSummons();
+        cancelBossDamageTimeout();
+        bossDamageRecords.clear();
+        bossDamageEncounterStartTime = 0L;
+        bossDamageLastTime = 0L;
+        bossDamageEncounterMobId = 0;
 
         MonsterListener[] listenersList;
         statiLock.lock();
@@ -1224,6 +1413,54 @@ public class Monster extends AbstractLoadedLife {
         }
 
         return curId;
+    }
+
+    public int getBossEncounterMobId() {
+        return bossDamageEncounterMobId > 0 ? bossDamageEncounterMobId : getId();
+    }
+
+    public boolean willReviveBoss() {
+        List<Integer> revives = getRevives();
+        if (revives == null || revives.isEmpty()) {
+            return false;
+        }
+
+        for (Integer mobId : revives) {
+            Monster mob = LifeFactory.getMonster(mobId);
+            if (mob != null && mob.isBoss()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public BossDamageSummary getBossDamageSummary(long endTime) {
+        long startTime = bossDamageEncounterStartTime > 0 ? bossDamageEncounterStartTime : endTime;
+        int encounterMobId = getBossEncounterMobId();
+        List<BossDamageSnapshot> participants = bossDamageRecords.values().stream()
+                .map(record -> record.snapshot(startTime, endTime))
+                .sorted((left, right) -> Long.compare(right.getTotalDamage(), left.getTotalDamage()))
+                .toList();
+        long totalDamage = participants.stream().mapToLong(BossDamageSnapshot::getTotalDamage).sum();
+        return new BossDamageSummary(encounterMobId, startTime, endTime, totalDamage, participants);
+    }
+
+    public void inheritBossDamageSummary(BossDamageSummary summary) {
+        if (!isBoss() || summary == null) {
+            return;
+        }
+
+        bossDamageRecords.clear();
+        for (BossDamageSnapshot snapshot : summary.getParticipants()) {
+            bossDamageRecords.put(snapshot.getPlayerId(), BossDamageRecord.fromSnapshot(snapshot));
+        }
+        bossDamageEncounterStartTime = summary.getStartTime();
+        bossDamageLastTime = summary.getEndTime();
+        bossDamageEncounterMobId = summary.getEncounterMobId();
+
+        if (bossDamageLastTime > 0) {
+            ensureBossDamageTimeoutTask();
+        }
     }
 
     public boolean isAlive() {
@@ -2419,10 +2656,149 @@ public class Monster extends AbstractLoadedLife {
         return stats.removeAfter();
     }
 
+    private static class BossDamageRecord {
+        private final int playerId;
+        private String playerName;
+        private long totalDamage;
+        private int hitCount;
+        private int directHitCount;
+        private int summonHitCount;
+        private int maxSingleDamage;
+        private int lastSkillId;
+        private int lastSkillTargetCount;
+        private long firstDamageTime;
+        private long lastDamageTime;
+
+        private BossDamageRecord(Character from) {
+            this.playerId = from.getId();
+            this.playerName = from.getName();
+        }
+
+        private static BossDamageRecord fromSnapshot(BossDamageSnapshot snapshot) {
+            BossDamageRecord record = new BossDamageRecord(snapshot.getPlayerId(), snapshot.getPlayerName());
+            record.totalDamage = snapshot.getTotalDamage();
+            record.hitCount = snapshot.getHitCount();
+            record.directHitCount = snapshot.getDirectHitCount();
+            record.summonHitCount = snapshot.getSummonHitCount();
+            record.maxSingleDamage = snapshot.getMaxSingleDamage();
+            record.lastSkillId = snapshot.getLastSkillId();
+            record.lastSkillTargetCount = snapshot.getLastSkillTargetCount();
+            record.firstDamageTime = snapshot.getFirstDamageTime();
+            record.lastDamageTime = snapshot.getLastDamageTime();
+            return record;
+        }
+
+        private BossDamageRecord(int playerId, String playerName) {
+            this.playerId = playerId;
+            this.playerName = playerName;
+        }
+
+        private void addDamage(Character from, int damage, boolean isFromSummon, long time, int skillId, int skillTargetCount) {
+            playerName = from.getName();
+            totalDamage += damage;
+            hitCount++;
+            if (isFromSummon) {
+                summonHitCount++;
+            } else {
+                directHitCount++;
+            }
+            maxSingleDamage = Math.max(maxSingleDamage, damage);
+            lastSkillId = skillId;
+            lastSkillTargetCount = skillTargetCount;
+            if (firstDamageTime <= 0) {
+                firstDamageTime = time;
+            }
+            lastDamageTime = time;
+        }
+
+        private BossDamageSnapshot snapshot(long encounterStartTime, long encounterEndTime) {
+            long encounterDuration = Math.max(MIN_BOSS_DPS_DURATION_MILLIS, encounterEndTime - encounterStartTime);
+            long activeDuration = Math.max(MIN_BOSS_DPS_DURATION_MILLIS, lastDamageTime - firstDamageTime);
+            return new BossDamageSnapshot(
+                    playerId,
+                    playerName,
+                    totalDamage,
+                    hitCount,
+                    directHitCount,
+                    summonHitCount,
+                    maxSingleDamage,
+                    lastSkillId,
+                    lastSkillTargetCount,
+                    firstDamageTime,
+                    lastDamageTime,
+                    totalDamage * 1000D / encounterDuration,
+                    totalDamage * 1000D / activeDuration);
+        }
+    }
+
+    @Getter
+    public static class BossDamageSnapshot {
+        private final int playerId;
+        private final String playerName;
+        private final long totalDamage;
+        private final int hitCount;
+        private final int directHitCount;
+        private final int summonHitCount;
+        private final int maxSingleDamage;
+        private final int lastSkillId;
+        private final int lastSkillTargetCount;
+        private final long firstDamageTime;
+        private final long lastDamageTime;
+        private final double encounterAvgDps;
+        private final double activeAvgDps;
+
+        private BossDamageSnapshot(int playerId, String playerName, long totalDamage, int hitCount,
+                                   int directHitCount, int summonHitCount, int maxSingleDamage,
+                                   int lastSkillId, int lastSkillTargetCount, long firstDamageTime,
+                                   long lastDamageTime, double encounterAvgDps, double activeAvgDps) {
+            this.playerId = playerId;
+            this.playerName = playerName;
+            this.totalDamage = totalDamage;
+            this.hitCount = hitCount;
+            this.directHitCount = directHitCount;
+            this.summonHitCount = summonHitCount;
+            this.maxSingleDamage = maxSingleDamage;
+            this.lastSkillId = lastSkillId;
+            this.lastSkillTargetCount = lastSkillTargetCount;
+            this.firstDamageTime = firstDamageTime;
+            this.lastDamageTime = lastDamageTime;
+            this.encounterAvgDps = encounterAvgDps;
+            this.activeAvgDps = activeAvgDps;
+        }
+    }
+
+    @Getter
+    public static class BossDamageSummary {
+        private final int encounterMobId;
+        private final long startTime;
+        private final long endTime;
+        private final long totalDamage;
+        private final List<BossDamageSnapshot> participants;
+
+        private BossDamageSummary(int encounterMobId, long startTime, long endTime, long totalDamage,
+                                  List<BossDamageSnapshot> participants) {
+            this.encounterMobId = encounterMobId;
+            this.startTime = startTime;
+            this.endTime = endTime;
+            this.totalDamage = totalDamage;
+            this.participants = participants;
+        }
+
+        public long getDurationMillis() {
+            return Math.max(1L, endTime - startTime);
+        }
+
+        public double getAverageDps() {
+            long dpsDuration = Math.max(MIN_BOSS_DPS_DURATION_MILLIS, getDurationMillis());
+            return totalDamage * 1000D / dpsDuration;
+        }
+    }
+
     public void dispose() {
         if (monsterItemDrop != null) {
             monsterItemDrop.cancel(false);
         }
+        cancelBossDamageTimeout();
 
         this.getMap().dismissRemoveAfter(this);
     }

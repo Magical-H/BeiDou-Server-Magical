@@ -9,7 +9,6 @@ import org.gms.client.Character;
 import org.gms.client.inventory.InventoryType;
 import org.gms.client.inventory.Item;
 import org.gms.client.inventory.manipulator.InventoryManipulator;
-import org.gms.config.GameConfig;
 import org.gms.dao.entity.ItemTraceLogsDO;
 import org.gms.dao.mapper.ItemRecoveryLogsMapper;
 import org.gms.dao.mapper.ItemTraceLogsMapper;
@@ -26,7 +25,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.NoSuchMessageException;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.text.ParseException;
@@ -453,26 +451,6 @@ public class TraceabilityService {
                 log.error("写入物品溯源双重日志失败，物品UID: " + item.getUid(), e);
             }
         });
-    }
-
-
-    /**
-     * 定时清理过期溯源日志 (每天凌晨3点)
-     */
-    @Scheduled(cron = "0 0 3 * * ?")
-    public void cleanupTraceLogs() {
-        long now = System.currentTimeMillis();
-        int retentionDays = GameConfig.getServerInt("trace_log_retention_days", 30);
-        long deleteDeadline = now - TimeUnit.DAYS.toMillis(retentionDays);
-        int deletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create().where(ITEM_TRACE_LOGS_DO.TIMESTAMP.lt(deleteDeadline)));
-        if (deletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的物品溯源日志。", deletedCount, retentionDays);
-
-        int shortRetentionDays = GameConfig.getServerInt("trace_log_short_retention_days", 3);
-        long shortDeleteDeadline = now - TimeUnit.DAYS.toMillis(shortRetentionDays);
-        int shortDeletedCount = itemTraceLogsMapper.deleteByQuery(QueryWrapper.create()
-                .where(ITEM_TRACE_LOGS_DO.TIMESTAMP.lt(shortDeleteDeadline))
-                .and(ITEM_TRACE_LOGS_DO.ACTION_TYPE.in(TraceabilityService.ActionType.SYSTEM.name(), TraceabilityService.ActionType.SYSTEM.name())));
-        if (shortDeletedCount > 0) log.info("已物理删除 {} 条超过 {} 天保留期的短期物品溯源日志 (SPAWN/DESPAWN)。", shortDeletedCount, shortRetentionDays);
     }
 
     /**

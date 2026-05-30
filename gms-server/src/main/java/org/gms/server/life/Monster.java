@@ -88,7 +88,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Setter @Getter
 public class Monster extends AbstractLoadedLife {
     private static final long MIN_BOSS_DPS_DURATION_MILLIS = 1000L;
-    private static final long BOSS_DAMAGE_TIMEOUT_CHECK_INTERVAL_MILLIS = 1000L;
+    private static final long BOSS_DAMAGE_TIMEOUT_CHECK_INTERVAL_MILLIS = 5000L;
 
     /*
     ======================================
@@ -418,6 +418,7 @@ public class Monster extends AbstractLoadedLife {
 
     public void setHpZero() {     // force HP = 0
         applyAndGetHpDamage(Integer.MAX_VALUE, false);
+        cancelBossDamageTimeout();
     }
 
     private boolean applyAnimationIfRoaming(int attackPos, MobSkill skill) {   // 漫游：不播放攻击或技能动画
@@ -622,7 +623,11 @@ public class Monster extends AbstractLoadedLife {
 
         BossDamageRecord record = bossDamageRecords.computeIfAbsent(from.getId(), id -> new BossDamageRecord(from));
         record.addDamage(from, actualDamage, isFromSummon, now, lastSkillId.get(), lastSkillTargetCount.get());
-        ensureBossDamageTimeoutTask();
+        if (isAlive()) {
+            ensureBossDamageTimeoutTask();
+        } else {
+            cancelBossDamageTimeout();
+        }
     }
 
     private void ensureBossDamageTimeoutTask() {

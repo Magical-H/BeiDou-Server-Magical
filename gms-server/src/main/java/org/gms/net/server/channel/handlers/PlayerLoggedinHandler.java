@@ -21,6 +21,7 @@
  */
 package org.gms.net.server.channel.handlers;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.update.UpdateChain;
 import org.gms.client.BuddyList;
@@ -62,6 +63,7 @@ import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.PartyOperation;
 import org.gms.net.server.world.World;
 import org.gms.server.logging.AuditContext;
+import org.gms.service.ConfigService;
 import org.gms.service.HpMpAlertService;
 import org.gms.util.I18nUtil;
 import org.gms.util.SpringContextUtil;
@@ -84,6 +86,7 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
     private final NoteService noteService;
 
     private static final HpMpAlertService hpMpAlertService = ServerManager.getApplicationContext().getBean(HpMpAlertService.class);
+    private static final ConfigService configService = ServerManager.getApplicationContext().getBean(ConfigService.class);
 
     public PlayerLoggedinHandler(NoteService noteService) {
         this.noteService = noteService;
@@ -623,7 +626,11 @@ public final class PlayerLoggedinHandler extends AbstractPacketHandler {
 
         // NPC 脚本化
         if (GameConfig.getServerBoolean("use_npcs_scriptable")) {
-            Map<Integer, String> npcsIds = GameConfig.getServerObject("npcs_scriptable", new HashMap<>());
+            Map<Integer, String> npcsIds = configService.readJson(
+                    "npcs_scriptable",
+                    new TypeReference<Map<Integer, String>>() {
+                    },
+                    new HashMap<>());
             if (GameConfig.getServerBoolean("use_rebirth_system")) {
                 npcsIds.put(GameConfig.getServerInt("rebirth_npc_id"), "Rebirth");
             }
